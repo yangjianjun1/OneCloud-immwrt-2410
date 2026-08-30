@@ -179,18 +179,18 @@ jobs:
           [ -f "$f" ] && sha256sum "$f" > "${f}.sha"
           [ -f "$f" ] && xz -9 --threads=0 --compress "$f"
         done
--        # 生成 U 盘安装包（combined 镜像，可直接 dd 到 U 盘启动）
-+        # 生成 U 盘安装包（meson8b 原始 .img 即为可 dd 到 U 盘启动镜像）
-         shopt -s nullglob
--        for usb_img in openwrt/bin/targets/*/*/*combined*.img; do
-+        for usb_img in openwrt/bin/targets/*/*/*.img; do
-+          [[ "$usb_img" == *.burn.img ]] && continue
-           [ -f "$usb_img" ] || continue
-           xz -9 --threads=0 --compress -k "$usb_img"
-
+        # 生成 U 盘安装包（meson8b 原始 .img 即为可 dd 到 U 盘启动镜像）
+        shopt -s nullglob
+        for usb_img in openwrt/bin/targets/*/*/*.img; do
+          [[ "$usb_img" == *.burn.img ]] && continue
+          [ -f "$usb_img" ] || continue
+          xz -9 --threads=0 --compress -k "$usb_img"
+          sha256sum "${usb_img}.xz" > "${usb_img}.xz.sha"
+        done
         # 清理中间文件（仅删除未压缩的 .img 和 .gz，保留 .xz 和 .sha）
         sudo rm -f openwrt/bin/targets/*/*/*.img
         sudo rm -f openwrt/bin/targets/*/*/*.gz
+
 
     - name: Check space usage
       if: (!cancelled())
