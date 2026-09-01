@@ -33,21 +33,6 @@ git clone https://github.com/Openwrt-Passwall/openwrt-passwall.git package/chaji
 #git checkout ebd3355bdf2fcaa9e0c43ec0704a8d9d8cf9f658
 #cd -
 
-# 拉取 easytier、luci-app-easytier
-git clone https://github.com/EasyTier/luci-app-easytier.git package/chajian/easytier
-
-# 拉取锐捷认证
-git clone https://github.com/sbwml/luci-app-mentohust.git package/chajian/mentohust
-
-# 删除自带的 open-app-filter
-rm -rf feeds/packages/net/open-app-filter
-rm -rf package/feeds/packages/open-app-filter
-# 拉取新的 OpenAppFilter、luci-app-oaf
-git clone https://github.com/destan19/OpenAppFilter.git package/chajian/OpenAppFilter
-
-# 拉取 luci-app-socat
-git clone https://github.com/chenmozhijin/luci-app-socat.git package/chajian/socat
-
 # 替换 tailscale 的默认启动脚本和配置
 sed -i '/\/etc\/init\.d\/tailscale/d;/\/etc\/config\/tailscale/d;' feeds/packages/net/tailscale/Makefile
 
