@@ -50,6 +50,15 @@ git clone https://github.com/chenmozhijin/luci-app-socat.git package/chajian/soc
 
 # 替换 tailscale 的默认启动脚本和配置
 sed -i '/\/etc\/init\.d\/tailscale/d;/\/etc\/config\/tailscale/d;' feeds/packages/net/tailscale/Makefile
+
+# 拉取 luci-app-tailscale
+git clone https://github.com/asvow/luci-app-tailscale.git package/chajian/tailscale/luci-app-tailscale
+# 拉取 luci-app-poweroffdevice（24.10 js 分支）
+git clone -b js https://github.com/sirpdboy/luci-app-poweroffdevice.git package/chajian/poweroffdevice
+
+# 拉取 luci-app-mosdns（含 mosdns 主程序 + v2dat）
+git clone https://github.com/sbwml/luci-app-mosdns.git package/chajian/mosdns
+
 # 拉取 luci-app-tailscale
 git clone https://github.com/asvow/luci-app-tailscale.git package/chajian/tailscale/luci-app-tailscale
 
