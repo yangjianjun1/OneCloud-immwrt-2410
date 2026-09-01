@@ -154,7 +154,7 @@ jobs:
         rootfs_img_mnt="img"
 
         sudo rm -rf "$boot_img" "$boot_img_mnt" "$rootfs_img_mnt"
-        sudo dd if=/dev/zero of="$boot_img" bs=1M count=512
+        sudo dd if=/dev/zero of="$boot_img" bs=1M count=600
         sudo mkfs.ext4 "$boot_img"
         sudo mkdir -p "$boot_img_mnt" "$rootfs_img_mnt"
         sudo mount "$boot_img" "$boot_img_mnt"
