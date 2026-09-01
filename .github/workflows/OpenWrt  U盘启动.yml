@@ -136,7 +136,7 @@ jobs:
         # 读取openwrt的.config，获取rootfs分区大小，兜底400
         cd openwrt
         . .config
-        ROOTFS_SIZE_M=${CONFIG_TARGET_ROOTFS_PARTSIZE:-400}
+        ROOTFS_SIZE_M=${CONFIG_TARGET_ROOTFS_PARTSIZE:-512}
         echo ">>> Read from .config ROOTFS_SIZE_M=${ROOTFS_SIZE_M} MiB"
         cd ..
 
