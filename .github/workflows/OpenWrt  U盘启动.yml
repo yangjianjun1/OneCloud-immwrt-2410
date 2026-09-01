@@ -187,7 +187,7 @@ jobs:
 
         sudo rm -rf openwrt.img
         sudo losetup -d "$loop"
-
+        
         cat <<'EOF' > burn/commands.txt
 PARTITION:boot:sparse:boot.simg
 PARTITION:rootfs:sparse:rootfs.simg
