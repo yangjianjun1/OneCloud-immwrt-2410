@@ -13,22 +13,6 @@
 rm -rf feeds/packages/lang/golang
 # 拉取新的 golang
 git clone https://github.com/sbwml/packages_lang_golang.git -b 26.x feeds/packages/lang/golang
-# 删除 passwall 自带的核心库
-rm -rf feeds/packages/net/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-libev,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,trojan-plus,tuic-client,v2ray-plugin,xray-plugin,geoview,shadow-tls}
-rm -rf package/feeds/packages/{xray-core,v2ray-geodata,sing-box,chinadns-ng,dns2socks,hysteria,ipt2socks,microsocks,naiveproxy,shadowsocks-libev,shadowsocks-rust,shadowsocksr-libev,simple-obfs,tcping,trojan-plus,tuic-client,v2ray-plugin,xray-plugin,geoview,shadow-tls}
-# 拉取新的 passwall-packages
-git clone https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git package/chajian/passwall-packages
-#cd package/chajian/passwall-packages
-#git checkout bc40fceb0488dfb5a4adb711cc1830a8021ee555
-#cd -
-# 删除 passwall 过时的 luci
-rm -rf feeds/luci/applications/luci-app-passwall
-rm -rf package/feeds/luci/luci-app-passwall
-# 拉取新的 passwall-luci
-git clone https://github.com/Openwrt-Passwall/openwrt-passwall.git package/chajian/passwall-luci
-#cd package/chajian/passwall-luci
-#git checkout ebd3355bdf2fcaa9e0c43ec0704a8d9d8cf9f658
-#cd -
 # 拉取 luci-app-poweroffdevice（24.10 js 分支）
 git clone -b js https://github.com/sirpdboy/luci-app-poweroffdevice.git package/chajian/poweroffdevice
 # 拉取 luci-app-mosdns（含 mosdns 主程序 + v2dat）
