@@ -133,13 +133,6 @@ jobs:
         curl -L -o ./uboot.img https://github.com/lxiaya/u-boot-onecloud/releases/download/build-20230901-0443/eMMC.burn.img
         ./AmlImg unpack ./uboot.img burn/
 
-        # 读取openwrt的.config，获取rootfs分区大小，兜底512
-        cd openwrt
-        . .config
-        ROOTFS_SIZE_M=${CONFIG_TARGET_ROOTFS_PARTSIZE:-512}
-        echo ">>> Read from .config ROOTFS_SIZE_M=${ROOTFS_SIZE_M} MiB"
-        cd ..
-
         # 安全解压 .gz（无匹配时不会报错）
         shopt -s nullglob
         gz_files=(openwrt/bin/targets/*/*/*.gz)
@@ -154,43 +147,64 @@ jobs:
         fi
         diskimg="${img_files[0]}"
         loop=$(sudo losetup --find --show --partscan -r "$diskimg")
+
         boot_img="openwrt.img"
         boot_img_mnt="xd"
         rootfs_img_mnt="img"
         sudo rm -rf "$boot_img" "$boot_img_mnt" "$rootfs_img_mnt"
-
-        # 使用变量，不再写死400
-        sudo dd if=/dev/zero of="$boot_img" bs=1M count="${ROOTFS_SIZE_M}"
-        sudo mkfs.ext4 "$boot_img"
         sudo mkdir -p "$boot_img_mnt" "$rootfs_img_mnt"
-        sudo mount "$boot_img" "$boot_img_mnt"
+
+        # 只读挂载源rootfs，读取实际活动占用容量
         sudo mount -r "${loop}p2" "$rootfs_img_mnt"
+        # df -P: 1024‑byte 块
+        used_1k=$(sudo df -P "$rootfs_img_mnt" | awk 'NR==2 {print $3}')
+        echo ">>> rootfs 源实际已占用(1K块): ${used_1k}"
+
+        # 计算：实际占用 +30%余量；最小保底256MiB，上限1024MiB
+        used_mib=$(( used_1k / 1024 ))
+        calc_mib=$(( used_mib * 130 / 100 ))
+        ROOTFS_SIZE_M=$(( calc_mib > 256 ? calc_mib : 256 ))
+        ROOTFS_SIZE_M=$(( ROOTFS_SIZE_M < 1024 ? ROOTFS_SIZE_M : 1024 ))
+        echo ">>> 计算后镜像大小 ${ROOTFS_SIZE_M} MiB (源占用 ${used_mib} MiB)"
+
+        # 动态生成ext4镜像
+        sudo dd if=/dev/zero of="$boot_img" bs=1M count="${ROOTFS_SIZE_M}" status=none
+        sudo mkfs.ext4 -F "$boot_img"
+        sudo mount "$boot_img" "$boot_img_mnt"
+
+        # 复制文件
         cd "$rootfs_img_mnt"
         sudo cp -r * ../"$boot_img_mnt"
         cd ..
+
         sudo sync
         sudo umount "$boot_img_mnt"
         sudo umount "$rootfs_img_mnt"
+
+        # 转为 sparse 镜像
         sudo img2simg "${loop}p1" burn/boot.simg
         sudo img2simg openwrt.img burn/rootfs.simg
+
         sudo rm -rf openwrt.img
         sudo losetup -d "$loop"
-        cat <<EOF >> burn/commands.txt
-        PARTITION:boot:sparse:boot.simg
-        PARTITION:rootfs:sparse:rootfs.simg
-        EOF
+
+        cat <<'EOF' > burn/commands.txt
+PARTITION:boot:sparse:boot.simg
+PARTITION:rootfs:sparse:rootfs.simg
+EOF
+
         # 打包 burn.img
         prefix=$(basename "$diskimg" .img)
         target_dir=$(dirname "$diskimg")
         burnimg="${target_dir}/${prefix}.burn.img"
         ./AmlImg pack "$burnimg" burn/
+
         # 压缩并生成校验文件（直刷包）
         for f in openwrt/bin/targets/*/*/*.burn.img; do
           [ -f "$f" ] && sha256sum "$f" > "${f}.sha"
           [ -f "$f" ] && xz -9 --threads=0 --compress "$f"
         done
         # 生成 U 盘安装包（meson8b 原始 .img 即为可 dd 到 U 盘启动镜像）
-        shopt -s nullglob
         for usb_img in openwrt/bin/targets/*/*/*.img; do
           [[ "$usb_img" == *.burn.img ]] && continue
           [ -f "$usb_img" ] || continue
