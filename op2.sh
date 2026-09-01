@@ -13,8 +13,8 @@
 rm -rf feeds/packages/lang/golang
 # 拉取新的 golang
 git clone https://github.com/sbwml/packages_lang_golang.git -b 26.x feeds/packages/lang/golang
-# 拉取 luci-app-poweroffdevice（24.10 js 分支）
-git clone -b js https://github.com/sirpdboy/luci-app-poweroffdevice.git package/chajian/poweroffdevice
+# 拉取 luci-app-poweroffdevice（master 分支即 24.10 JS 版）
+git clone https://github.com/sirpdboy/luci-app-poweroffdevice.git package/chajian/poweroffdevice
 # 拉取 luci-app-mosdns（含 mosdns 主程序 + v2dat）
 git clone https://github.com/sbwml/luci-app-mosdns.git package/chajian/mosdns
 ## 筛选程序
