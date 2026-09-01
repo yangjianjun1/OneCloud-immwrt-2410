@@ -133,7 +133,7 @@ jobs:
         curl -L -o ./uboot.img https://github.com/lxiaya/u-boot-onecloud/releases/download/build-20230901-0443/eMMC.burn.img
         ./AmlImg unpack ./uboot.img burn/
 
-        # 读取openwrt的.config，获取rootfs分区大小，兜底400
+        # 读取openwrt的.config，获取rootfs分区大小，兜底512
         cd openwrt
         . .config
         ROOTFS_SIZE_M=${CONFIG_TARGET_ROOTFS_PARTSIZE:-512}
@@ -260,13 +260,13 @@ jobs:
       uses: Mattraks/delete-workflow-runs@main
       with:
         retain_days: 0
-        keep_minimum_runs: 2
+        keep_minimum_runs: 5
 
     - name: Remove old Releases
       uses: dev-drprasad/delete-older-releases@master
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       with:
-        keep_latest: 3
+        keep_latest: 5
         delete_tags: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
