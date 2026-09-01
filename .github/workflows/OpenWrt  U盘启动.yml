@@ -9,9 +9,7 @@
 # This is free software, licensed under the MIT License.
 # See /LICENSE for more information.
 #
-
 name: OneCloud U盘启动
-
 on:
   repository_dispatch:
   workflow_dispatch:
@@ -20,7 +18,6 @@ on:
         description: 'SSH connection to Actions'
         required: false
         default: 'false'
-
 env:
   REPO_URL: https://github.com/openwrt/openwrt.git
   REPO_BRANCH: openwrt-24.10
@@ -33,11 +30,9 @@ env:
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
-
 jobs:
   build:
     runs-on: ubuntu-22.04
-
     steps:
     - name: Checkout
       uses: actions/checkout@main
@@ -133,13 +128,12 @@ jobs:
         curl -L -o ./uboot.img https://github.com/lxiaya/u-boot-onecloud/releases/download/build-20230901-0443/eMMC.burn.img
         ./AmlImg unpack ./uboot.img burn/
 
-        # 安全解压 .gz（无匹配时不会报错）
         shopt -s nullglob
         gz_files=(openwrt/bin/targets/*/*/*.gz)
         if [ ${#gz_files[@]} -gt 0 ]; then
           gunzip openwrt/bin/targets/*/*/*.gz
         fi
-        # 找到 .img 文件
+
         img_files=(openwrt/bin/targets/*/*/*.img)
         if [ ${#img_files[@]} -eq 0 ]; then
           echo "错误：未找到 .img 文件"
@@ -154,25 +148,20 @@ jobs:
         sudo rm -rf "$boot_img" "$boot_img_mnt" "$rootfs_img_mnt"
         sudo mkdir -p "$boot_img_mnt" "$rootfs_img_mnt"
 
-        # 只读挂载源rootfs，读取实际活动占用容量
         sudo mount -r "${loop}p2" "$rootfs_img_mnt"
-        # df -P: 1024‑byte 块
         used_1k=$(sudo df -P "$rootfs_img_mnt" | awk 'NR==2 {print $3}')
         echo ">>> rootfs 源实际已占用(1K块): ${used_1k}"
 
-        # 计算：实际占用 +30%余量；最小保底256MiB，上限1024MiB
         used_mib=$(( used_1k / 1024 ))
         calc_mib=$(( used_mib * 130 / 100 ))
         ROOTFS_SIZE_M=$(( calc_mib > 256 ? calc_mib : 256 ))
         ROOTFS_SIZE_M=$(( ROOTFS_SIZE_M < 1024 ? ROOTFS_SIZE_M : 1024 ))
         echo ">>> 计算后镜像大小 ${ROOTFS_SIZE_M} MiB (源占用 ${used_mib} MiB)"
 
-        # 动态生成ext4镜像
         sudo dd if=/dev/zero of="$boot_img" bs=1M count="${ROOTFS_SIZE_M}" status=none
         sudo mkfs.ext4 -F "$boot_img"
         sudo mount "$boot_img" "$boot_img_mnt"
 
-        # 复制文件
         cd "$rootfs_img_mnt"
         sudo cp -r * ../"$boot_img_mnt"
         cd ..
@@ -181,40 +170,35 @@ jobs:
         sudo umount "$boot_img_mnt"
         sudo umount "$rootfs_img_mnt"
 
-        # 转为 sparse 镜像
         sudo img2simg "${loop}p1" burn/boot.simg
         sudo img2simg openwrt.img burn/rootfs.simg
 
         sudo rm -rf openwrt.img
         sudo losetup -d "$loop"
-        
-        cat <<'EOF' > burn/commands.txt
-PARTITION:boot:sparse:boot.simg
-PARTITION:rootfs:sparse:rootfs.simg
-EOF
 
-        # 打包 burn.img
+        echo "PARTITION:boot:sparse:boot.simg" > burn/commands.txt
+        echo "PARTITION:rootfs:sparse:rootfs.simg" >> burn/commands.txt
+
         prefix=$(basename "$diskimg" .img)
         target_dir=$(dirname "$diskimg")
         burnimg="${target_dir}/${prefix}.burn.img"
         ./AmlImg pack "$burnimg" burn/
 
-        # 压缩并生成校验文件（直刷包）
         for f in openwrt/bin/targets/*/*/*.burn.img; do
           [ -f "$f" ] && sha256sum "$f" > "${f}.sha"
           [ -f "$f" ] && xz -9 --threads=0 --compress "$f"
         done
-        # 生成 U 盘安装包（meson8b 原始 .img 即为可 dd 到 U 盘启动镜像）
+
         for usb_img in openwrt/bin/targets/*/*/*.img; do
           [[ "$usb_img" == *.burn.img ]] && continue
           [ -f "$usb_img" ] || continue
           xz -9 --threads=0 --compress -k "$usb_img"
           sha256sum "${usb_img}.xz" > "${usb_img}.xz.sha"
         done
-        # 清理中间文件（仅删除未压缩的 .img 和 .gz，保留 .xz 和 .sha）
+
         sudo rm -f openwrt/bin/targets/*/*/*.img
         sudo rm -f openwrt/bin/targets/*/*/*.gz
-        
+
     - name: Check space usage
       if: (!cancelled())
       run: df -hT
@@ -252,10 +236,10 @@ EOF
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
         echo "release_tag=OneCloud-$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
-        echo "📦 OpenWrt OneCloud Firmware" > release.txt
+        echo "OpenWrt OneCloud Firmware" > release.txt
         echo "" >> release.txt
-        echo "**编译时间**: $(date +"%Y-%m-%d %H:%M")" >> release.txt
-        echo "**源码分支**: ${{ env.REPO_BRANCH }}" >> release.txt
+        echo "编译时间: $(date +"%Y-%m-%d %H:%M")" >> release.txt
+        echo "源码分支: ${{ env.REPO_BRANCH }}" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware to release
