@@ -39,7 +39,7 @@ function merge_package(){
 ## 提取 fullconenat-nft
 merge_package openwrt-24.10 https://github.com/immortalwrt/immortalwrt.git package/network/utils package/network/utils/fullconenat-nft
 # 修改默认 IP
-sed -i 's/192.168.1.1/192.168.5.254/g' package/base-files/files/bin/config_generate
+sed -i 's/192.168.50.1/192.168.50.23/g' package/base-files/files/bin/config_generate
 #sed -i 's/192.168.1.1/192.168.8.1/g' package/base-files/files/bin/config_generate
 # 修改默认主题
 sed -i 's/luci-theme-bootstrap/luci-theme-material/g' feeds/luci/collections/luci-light/Makefile
