@@ -1,55 +1,58 @@
-#!/bin/sh
-# SPDX-License-Identifier: GPL-2.0-only
 #
-# Copyright (C) 2017 OpenWrt.org
-set -x
-[ $# -eq 6 ] || {
-    echo "SYNTAX: $0 <file> <bootfs image> <rootA image> <bootfs size> <rootA size> <rootB size>"
-    exit 1
-}
-OUTPUT="$1"
-BOOTFS="$2"
-ROOTFS_A="$3"
-BOOTFSSIZE="$4"
-ROOTFSSIZE_A="$5"
-ROOTFSSIZE_B="$6"
-UPGRADE_SIZE="512"
+# This is free software, licensed under the GNU General Public License v2.
+# See /LICENSE for more information.
+#
+include $(TOPDIR)/rules.mk
+include $(INCLUDE_DIR)/image.mk
 
-head=4
-sect=2048
-# -t 6 = FAT16 type 0x06
-set $(ptgen -o $OUTPUT -h $head -s $sect -l 4096 \
--t 6 -p ${BOOTFSSIZE}M \
--t 83 -p ${ROOTFSSIZE_A}M \
--t 83 -p ${ROOTFSSIZE_B}M \
--t 83 -p ${UPGRADE_SIZE}M )
+FAT32_BLOCK_SIZE=1024
+# 从 .config 读取分区配置
+BOOTFS_PARTSIZE:=$(shell grep CONFIG_TARGET_BOOTFS_PARTSIZE $(TOPDIR)/.config | cut -d= -f2)
+KERNEL_PARTSIZE:=$(shell grep CONFIG_TARGET_KERNEL_PARTSIZE $(TOPDIR)/.config | cut -d= -f2)
+ROOTFS_PARTSIZE:=$(shell grep CONFIG_TARGET_ROOTFS_PARTSIZE $(TOPDIR)/.config | cut -d= -f2)
 
-# ptgen输出：p1off p1sz p2off p2sz p3off p3sz p4off p4sz
-BOOTOFFSET="$(($1 / 512))"
-BOOTSIZE="$(($2 / 512))"
-ROOTA_OFFSET="$(($3 / 512))"
-ROOTA_SIZE="$(($4 / 512))"
-ROOTB_OFFSET="$(($5 / 512))"
-ROOTB_SIZE="$(($6 / 512))"
-UPG_OFFSET="$(($7 / 512))"
-UPG_SIZE="$(($8 / 512))"
+FAT32_BLOCKS=$(shell echo $$(($(BOOTFS_PARTSIZE)*1024*1024/$(FAT32_BLOCK_SIZE))))
 
-dd bs=512 if="$BOOTFS" of="$OUTPUT" seek="$BOOTOFFSET" conv=notrunc
-dd bs=512 if="$ROOTFS_A" of="$OUTPUT" seek="$ROOTA_OFFSET" conv=notrunc
+define Build/boot-script
+	# Make an U-boot image and copy it to the boot partition
+	mkimage -A arm -O linux -T script -C none -a 0 -e 0 -n "boot.scr" -d boot.txt  $(KDIR)/boot.scr
+endef
 
-# 创建空白rootB
-TMP_ROOTB=$(mktemp)
-dd if=/dev/zero of="$TMP_ROOTB" bs=512 count="${ROOTB_SIZE}"
-mkfs.ext4 "$TMP_ROOTB"
-dd bs=512 if="$TMP_ROOTB" of="$OUTPUT" seek="$ROOTB_OFFSET" conv=notrunc
-rm -f "$TMP_ROOTB"
+define Build/emmc-common
+	$(RM) -f $@.boot
+	mkfs.fat -C $@.boot $(FAT32_BLOCKS)
+	mkdir -p $(KDIR)/boot.fat
+	$(CP) $(KDIR)/boot.scr $(KDIR)/boot.fat/boot.scr
+	mcopy -i $@.boot $(KDIR)/boot.scr ::
+	$(CP) $(IMAGE_KERNEL) $(KDIR)/boot.fat/uImage
+	mcopy -i $@.boot $(KDIR)/boot.fat/uImage ::
+	$(foreach dts,$(shell echo $(DEVICE_DTS)),$(CP) $(DTS_DIR)/$(dts).dtb $(KDIR)/boot.fat/dtb;)
+	mcopy -i $@.boot $(KDIR)/boot.fat/dtb ::
+	$(RM) -rf $(KDIR)/boot.fat
+	./gen_aml_emmc_img.sh $@ $@.boot $(IMAGE_ROOTFS) \
+		$(BOOTFS_PARTSIZE) $(ROOTFS_PARTSIZE) $(ROOTFS_PARTSIZE)
+endef
 
-# 创建空白upgrade分区
-TMP_UPG=$(mktemp)
-dd if=/dev/zero of="$TMP_UPG" bs=512 count="${UPG_SIZE}"
-mkfs.ext4 "$TMP_UPG"
-dd bs=512 if="$TMP_UPG" of="$OUTPUT" seek="$UPG_OFFSET" conv=notrunc
-rm -f "$TMP_UPG"
+### Devices ###
+define Device/Default
+  FILESYSTEMS := ext4
+  IMAGES := emmc.img
+  KERNEL_DEPENDS = $$(wildcard $(DTS_DIR)/$$(DEVICE_DTS).dts)
+  KERNEL_LOADADDR := 0x01080000
+  KERNEL_NAME := Image
+  KERNEL := kernel-bin | uImage none
+  PROFILES = Default $$(DEVICE_NAME)
+endef
 
-sync
-echo "Done: p1(FAT16 ${BOOTFSSIZE}M), p2(rootA ${ROOTFSSIZE_A}M), p3(rootB ${ROOTFSSIZE_B}M), p4(upgrade ${UPGRADE_SIZE}M)"
+define Device/thunder-onecloud
+  DEVICE_DTS := amlogic/meson8b-onecloud
+  DEVICE_TITLE := Thunder OneCloud
+  KERNEL_LOADADDR := 0x00208000
+  IMAGE/emmc.img := boot-script onecloud | emmc-common $$(DEVICE_NAME)
+endef
+
+ifeq ($(SUBTARGET),meson8b)
+  TARGET_DEVICES += thunder-onecloud
+endif
+
+$(eval $(call BuildImage))
