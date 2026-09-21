@@ -29,8 +29,9 @@ define Build/emmc-common
 	$(foreach dts,$(shell echo $(DEVICE_DTS)),$(CP) $(DTS_DIR)/$(dts).dtb $(KDIR)/boot.fat/dtb;)
 	mcopy -i $@.boot $(KDIR)/boot.fat/dtb ::
 	$(RM) -rf $(KDIR)/boot.fat
+	# 参数顺序：emmc.img boot镜像 rootfs BOOTFS大小 rootA大小 rootB大小
 	./gen_aml_emmc_img.sh $@ $@.boot $(IMAGE_ROOTFS) \
-		$(KERNEL_PARTSIZE) $(ROOTFS_PARTSIZE) $(ROOTFS_PARTSIZE)
+		$(BOOTFS_PARTSIZE) $(ROOTFS_PARTSIZE) $(ROOTFS_PARTSIZE)
 endef
 
 ### Devices ###
