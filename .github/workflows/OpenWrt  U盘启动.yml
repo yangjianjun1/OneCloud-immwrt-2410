@@ -123,8 +123,8 @@ jobs:
 
     - name: Generate direct burn
       run: |
-        chmod +x $GITHUB_WORKSPACE/Scripts/convert2.sh
-        $GITHUB_WORKSPACE/Scripts/convert2.sh
+        chmod +x $GITHUB_WORKSPACE/Scripts/convert3.sh
+        $GITHUB_WORKSPACE/Scripts/convert3.sh
         
     - name: Check space usage
       if: (!cancelled())
