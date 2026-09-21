@@ -5,7 +5,7 @@
 include $(TOPDIR)/rules.mk
 include $(INCLUDE_DIR)/image.mk
 FAT32_BLOCK_SIZE=1024
-FAT32_BLOCKS=$(shell echo $$(($(CONFIG_TARGET_KERNEL_PARTSIZE)*1024*1024/$(FAT32_BLOCK_SIZE))))
+FAT32_BLOCKS=$(shell echo $$(($(CONFIG_TARGET_BOOTFS_PARTSIZE)*1024*1024/$(FAT32_BLOCK_SIZE))))
 define Build/boot-script
 	# Make an U-boot image and copy it to the boot partition
 	mkimage -A arm -O linux -T script -C none -a 0 -e 0 -n "boot.scr" -d boot.txt  $(KDIR)/boot.scr
