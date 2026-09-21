@@ -4,12 +4,20 @@
 #
 include $(TOPDIR)/rules.mk
 include $(INCLUDE_DIR)/image.mk
+
 FAT32_BLOCK_SIZE=1024
-FAT32_BLOCKS=$(shell echo $$(($(CONFIG_TARGET_BOOTFS_PARTSIZE)*1024*1024/$(FAT32_BLOCK_SIZE))))
+# 从 .config 读取分区大小配置
+BOOTFS_PARTSIZE:=$(shell grep CONFIG_TARGET_BOOTFS_PARTSIZE $(TOPDIR)/.config | cut -d= -f2)
+KERNEL_PARTSIZE:=$(shell grep CONFIG_TARGET_KERNEL_PARTSIZE $(TOPDIR)/.config | cut -d= -f2)
+ROOTFS_PARTSIZE:=$(shell grep CONFIG_TARGET_ROOTFS_PARTSIZE $(TOPDIR)/.config | cut -d= -f2)
+
+FAT32_BLOCKS=$(shell echo $$(($(BOOTFS_PARTSIZE)*1024*1024/$(FAT32_BLOCK_SIZE))))
+
 define Build/boot-script
 	# Make an U-boot image and copy it to the boot partition
 	mkimage -A arm -O linux -T script -C none -a 0 -e 0 -n "boot.scr" -d boot.txt  $(KDIR)/boot.scr
 endef
+
 define Build/emmc-common
 	$(RM) -f $@.boot
 	mkfs.fat -C $@.boot $(FAT32_BLOCKS)
@@ -22,8 +30,9 @@ define Build/emmc-common
 	mcopy -i $@.boot $(KDIR)/boot.fat/dtb ::
 	$(RM) -rf $(KDIR)/boot.fat
 	./gen_aml_emmc_img.sh $@ $@.boot $(IMAGE_ROOTFS) \
-		$(CONFIG_TARGET_KERNEL_PARTSIZE) $(CONFIG_TARGET_ROOTFS_PARTSIZE) $(CONFIG_TARGET_ROOTFS_PARTSIZE)
+		$(KERNEL_PARTSIZE) $(ROOTFS_PARTSIZE) $(ROOTFS_PARTSIZE)
 endef
+
 ### Devices ###
 define Device/Default
   FILESYSTEMS := ext4
@@ -34,13 +43,16 @@ define Device/Default
   KERNEL := kernel-bin | uImage none
   PROFILES = Default $$(DEVICE_NAME)
 endef
+
 define Device/thunder-onecloud
   DEVICE_DTS := amlogic/meson8b-onecloud
   DEVICE_TITLE := Thunder OneCloud
   KERNEL_LOADADDR := 0x00208000
   IMAGE/emmc.img := boot-script onecloud | emmc-common $$(DEVICE_NAME)
 endef
+
 ifeq ($(SUBTARGET),meson8b)
   TARGET_DEVICES += thunder-onecloud
 endif
+
 $(eval $(call BuildImage))
