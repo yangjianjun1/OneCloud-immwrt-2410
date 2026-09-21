@@ -6,14 +6,26 @@ include $(TOPDIR)/rules.mk
 include $(INCLUDE_DIR)/image.mk
 
 FAT32_BLOCK_SIZE=1024
-# 从 .config 读取分区大小配置（单位 MB），^ 只匹配非注释赋值行
+
+# ===== boot 分区（MB，给 ptgen / mkfs.fat 用）=====
 BOOTFS_PARTSIZE:=$(shell grep '^CONFIG_TARGET_BOOTFS_PARTSIZE=' $(TOPDIR)/.config | cut -d= -f2)
+# 防御：grep 不到时兜底 256，避免算术空值崩溃
+ifeq ($(BOOTFS_PARTSIZE),)
+BOOTFS_PARTSIZE:=256
+endif
+
+# ===== rootfs 分区（.config 写 MB，换算成字节 override 给 make_ext4fs）=====
 ROOTFS_PARTSIZE_MB:=$(shell grep '^CONFIG_TARGET_ROOTFS_PARTSIZE=' $(TOPDIR)/.config | cut -d= -f2)
+# 防御：grep 不到时兜底 600
+ifeq ($(ROOTFS_PARTSIZE_MB),)
+ROOTFS_PARTSIZE_MB:=600
+endif
+# MB → 字节，override 强制覆盖（image.mk 里 make_ext4fs 读的就是 CONFIG_TARGET_ROOTFS_PARTSIZE）
+override CONFIG_TARGET_ROOTFS_PARTSIZE:=$(shell echo $$(($(ROOTFS_PARTSIZE_MB)*1024*1024)))
+override TARGET_ROOTFS_PARTSIZE:=$(shell echo $$(($(ROOTFS_PARTSIZE_MB)*1024*1024)))
 
-# MB换算字节，覆盖原生TARGET_ROOTFS_PARTSIZE，供给make_ext4fs
-TARGET_ROOTFS_PARTSIZE:=$(shell echo $$(($(ROOTFS_PARTSIZE_MB)*1024*1024)))
-
-FAT32_BLOCKS=$(shell echo $$(($(BOOTFS_PARTSIZE)*1024*1024/$(FAT32_BLOCK_SIZE))))
+# FAT32 块数（立即展开，只算一次）
+FAT32_BLOCKS:=$(shell echo $$(($(BOOTFS_PARTSIZE)*1024*1024/$(FAT32_BLOCK_SIZE))))
 
 define Build/boot-script
 	# Make an U-boot image and copy it to the boot partition
