@@ -1,4 +1,3 @@
-# 设置环境变量
 setenv condev "console=ttyAML0,115200n8 no_console_suspend consoleblank=0"
 setenv kernel_loadaddr "0x00208000"
 setenv dtb_loadaddr "0x21800000"
@@ -6,13 +5,15 @@ setenv initrd_loadaddr "0x22000000"
 setenv dtb_name "dtb"
 setenv boot_start "bootm ${kernel_loadaddr} - ${dtb_loadaddr}"
 
-# 设置 bootargs_emmc 环境变量
-setenv bootargs_emmc "root=/dev/mmcblk1p2 rootwait ro ${condev} fsck.repair=yes net.ifnames=0"
+setenv bootargs_rootA "root=/dev/mmcblk1p2 rootwait ro ${condev} fsck.repair=yes net.ifnames=0"
+setenv bootargs_rootB "root=/dev/mmcblk1p3 rootwait ro ${condev} fsck.repair=yes net.ifnames=0"
 
-# 尝试加载并启动系统
-if fatload mmc 1 ${initrd_loadaddr} uInitrd &&
-   setenv bootargs ${bootargs_emmc} &&
-   fatload mmc 1 ${kernel_loadaddr} uImage &&
-   fatload mmc 1 ${dtb_loadaddr} ${dtb_name}; then
-    run boot_start
-fi
+setenv load_boot "fatload mmc 1:1 ${kernel_loadaddr} uImage && fatload mmc 1:1 ${dtb_loadaddr} ${dtb_name}"
+setenv boot_a "echo Boot rootA mmcblk1p2; setenv bootargs ${bootargs_rootA}; run boot_start"
+setenv boot_b "echo Boot rootB mmcblk1p3; setenv bootargs ${bootargs_rootB}; run boot_start"
+
+setenv boot_ab_main "run load_boot || (echo Load boot files failed!; reset); if test \"${boot_part}\" = \"B\"; then run boot_b || (echo rootB boot fail, fallback to rootA; setenv boot_part A; saveenv; run boot_a); else run boot_a || (echo rootA boot fail, fallback to rootB; setenv boot_part B; saveenv; run boot_b); fi"
+
+setenv bootdelay 2
+setenv bootcmd "echo Booting A/B system, press any key to stop...; run boot_ab_main"
+setenv boot_part A
