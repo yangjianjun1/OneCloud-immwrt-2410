@@ -6,10 +6,12 @@ include $(TOPDIR)/rules.mk
 include $(INCLUDE_DIR)/image.mk
 
 FAT32_BLOCK_SIZE=1024
-# 从 .config 读取分区大小配置
-BOOTFS_PARTSIZE:=$(shell grep CONFIG_TARGET_BOOTFS_PARTSIZE $(TOPDIR)/.config | cut -d= -f2)
-KERNEL_PARTSIZE:=$(shell grep CONFIG_TARGET_KERNEL_PARTSIZE $(TOPDIR)/.config | cut -d= -f2)
-ROOTFS_PARTSIZE:=$(shell grep CONFIG_TARGET_ROOTFS_PARTSIZE $(TOPDIR)/.config | cut -d= -f2)
+# 从 .config 读取分区大小配置（单位 MB），^ 只匹配非注释赋值行
+BOOTFS_PARTSIZE:=$(shell grep '^CONFIG_TARGET_BOOTFS_PARTSIZE=' $(TOPDIR)/.config | cut -d= -f2)
+ROOTFS_PARTSIZE_MB:=$(shell grep '^CONFIG_TARGET_ROOTFS_PARTSIZE=' $(TOPDIR)/.config | cut -d= -f2)
+
+# MB换算字节，覆盖原生TARGET_ROOTFS_PARTSIZE，供给make_ext4fs
+TARGET_ROOTFS_PARTSIZE:=$(shell echo $$(($(ROOTFS_PARTSIZE_MB)*1024*1024)))
 
 FAT32_BLOCKS=$(shell echo $$(($(BOOTFS_PARTSIZE)*1024*1024/$(FAT32_BLOCK_SIZE))))
 
@@ -31,7 +33,7 @@ define Build/emmc-common
 	$(RM) -rf $(KDIR)/boot.fat
 	# 参数顺序：emmc.img boot镜像 rootfs BOOTFS大小 rootA大小 rootB大小
 	./gen_aml_emmc_img.sh $@ $@.boot $(IMAGE_ROOTFS) \
-		$(BOOTFS_PARTSIZE) $(ROOTFS_PARTSIZE) $(ROOTFS_PARTSIZE)
+		$(BOOTFS_PARTSIZE) $(ROOTFS_PARTSIZE_MB) $(ROOTFS_PARTSIZE_MB)
 endef
 
 ### Devices ###
