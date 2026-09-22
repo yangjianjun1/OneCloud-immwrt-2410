@@ -17,8 +17,7 @@ endif
 
 # ===== rootfs 分区（.config 写 MB，换算成字节 override 给 make_ext4fs）=====
 # .config 里写 CONFIG_TARGET_ROOTFS_PARTSIZE=600（单位 MB，直观）
-# 注意：必须写 MB！不要写字节 629145600，否则会重复换算变成 600TB
-ROOTFS_PARTSIZE_MB:=$(shell grep '^CONFIG_TARGET_ROOTFS_PARTSIZE=' $(TOPDIR)/.config | cut -d= -f2)
+ROOTFS_PARTSIZE:=$(shell grep '^CONFIG_TARGET_ROOTFS_PARTSIZE=' $(TOPDIR)/.config | cut -d= -f2)
 # 防御：grep 不到时兜底 600
 ifeq ($(ROOTFS_PARTSIZE_MB),)
 ROOTFS_PARTSIZE_MB:=600
