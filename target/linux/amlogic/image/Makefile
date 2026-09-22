@@ -15,16 +15,19 @@ ifeq ($(BOOTFS_PARTSIZE),)
 BOOTFS_PARTSIZE:=256
 endif
 
-# ===== rootfs 分区（.config 写 MB，换算成字节 override 给 make_ext4fs）=====
-# .config 里写 CONFIG_TARGET_ROOTFS_PARTSIZE=600（单位 MB，直观）
-ROOTFS_PARTSIZE_MB:=$(shell grep '^CONFIG_TARGET_ROOTFS_PARTSIZE=' $(TOPDIR)/.config | cut -d= -f2)
-# 防御：grep 不到时兜底 600
-ifeq ($(ROOTFS_PARTSIZE_MB),)
-ROOTFS_PARTSIZE_MB:=600
+# ===== rootfs 分区（智能判断：.config 写 MB 或字节都兼容）=====
+# 自动识别：值 > 1048576（1MB的字节数）认为是字节，直接用；否则认为是 MB，×1024×1024 换算
+# 这样 .config 里写 600 或 629145600 都不会出错，彻底避免 600TB 重复换算问题
+ROOTFS_PARTSIZE_RAW:=$(shell grep '^CONFIG_TARGET_ROOTFS_PARTSIZE=' $(TOPDIR)/.config | cut -d= -f2)
+# 防御：grep 不到时兜底 600（MB）
+ifeq ($(ROOTFS_PARTSIZE_RAW),)
+ROOTFS_PARTSIZE_RAW:=600
 endif
-# MB → 字节，override 强制覆盖（image.mk 里 make_ext4fs 读的就是 CONFIG_TARGET_ROOTFS_PARTSIZE）
-override CONFIG_TARGET_ROOTFS_PARTSIZE:=$(shell echo $$(($(ROOTFS_PARTSIZE_MB)*1024*1024)))
-override TARGET_ROOTFS_PARTSIZE:=$(shell echo $$(($(ROOTFS_PARTSIZE_MB)*1024*1024)))
+ROOTFS_PARTSIZE_BYTES:=$(shell if [ $(ROOTFS_PARTSIZE_RAW) -gt 1048576 ]; then echo $(ROOTFS_PARTSIZE_RAW); else echo $$(($(ROOTFS_PARTSIZE_RAW)*1024*1024)); fi)
+ROOTFS_PARTSIZE_MB:=$(shell echo $$(($(ROOTFS_PARTSIZE_BYTES)/1024/1024)))
+# override 给 make_ext4fs（字节）
+override CONFIG_TARGET_ROOTFS_PARTSIZE:=$(ROOTFS_PARTSIZE_BYTES)
+override TARGET_ROOTFS_PARTSIZE:=$(ROOTFS_PARTSIZE_BYTES)
 
 # FAT32 块数（立即展开，只算一次）
 FAT32_BLOCKS:=$(shell echo $$(($(BOOTFS_PARTSIZE)*1024*1024/$(FAT32_BLOCK_SIZE))))
