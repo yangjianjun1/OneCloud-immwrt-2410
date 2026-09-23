@@ -3,10 +3,16 @@ set -e
 
 #=================================================
 # 玩客云 OpenWrt 固件 -> 标准 Amlogic 线刷包 转换脚本
+# 【4分区AB版本：boot@16M size256M，rootfsa=600M，rootfsb=600M，data剩余全部】
+# 分区偏移：
+# boot: start 16M , size 256M
+# rootfsa: start 272M, size 600M
+# rootfsb: start 872M, size 600M
+# data: start 1472M, size=0(剩余全部)
 # 输出：.burn.img（USB Burning Tool 可直接线刷）
 #=================================================
 
-echo "===== 开始打包标准 Amlogic 线刷包 ====="
+echo "===== 开始打包标准 Amlogic 4分区AB线刷包 ====="
 
 # 关键：确保在仓库根目录工作
 cd $GITHUB_WORKSPACE
@@ -39,40 +45,30 @@ echo "OpenWrt 镜像: $diskimg"
 loop=$(sudo losetup --find --show --partscan $diskimg)
 echo "循环设备: $loop"
 
-# 准备 rootfs 镜像
-img_ext="openwrt.img"
-img_mnt="xd"
-rootfs_mnt="img"
+# --------------------------
+# 分区映射
+# ${loop}p1 → boot
+# ${loop}p2 → rootfsa
+# ${loop}p3 → rootfsb
+# ${loop}p4 → data
+# --------------------------
 
-sudo rm -rf ${img_ext} ${img_mnt} ${rootfs_mnt}
-sudo dd if=/dev/zero of=${img_ext} bs=1M count=2000
-# 加 -F 强制格式化，避免交互提示
-sudo mkfs.ext4 -F ${img_ext}
-sudo mkdir -p ${img_mnt} ${rootfs_mnt}
-sudo mount ${img_ext} ${img_mnt}
-sudo mount ${loop}p2 ${rootfs_mnt}
-
-# 复制 rootfs 内容（关键：用 cp -a 且用 . 而不是 *，确保隐藏文件也复制）
-cd ${rootfs_mnt}
-sudo cp -a . ../${img_mnt}/
-cd ..
-sudo sync
-sudo umount ${img_mnt}
-sudo umount ${rootfs_mnt}
-
-# 6. 转换为 sparse 格式并打包
-echo "[6/7] 转换 sparse 格式并打包..."
+# 6. 转换4个分区为 sparse 格式
+echo "[6/7] 转换 sparse 格式并打包4分区..."
 sudo img2simg ${loop}p1 burn/boot.simg
-sudo img2simg openwrt.img burn/rootfs.simg
+sudo img2simg ${loop}p2 burn/rootfsa.simg
+sudo img2simg ${loop}p3 burn/rootfsb.simg
+sudo img2simg ${loop}p4 burn/data.simg
 
-# 只删除我们创建的 openwrt.img，不要用通配符
-sudo rm -f openwrt.img
+# 释放loop设备
 sudo losetup -d $loop
 
-# 添加分区配置
-cat <<EOF >> burn/commands.txt
-PARTITION:boot:sparse:boot.simg
-PARTITION:rootfs:sparse:rootfs.simg
+# 写入【带偏移+大小】分区烧录配置，覆盖原有文件
+cat <<EOF > burn/commands.txt
+PARTITION:boot:sparse:boot.simg:16M:256M
+PARTITION:rootfsa:sparse:rootfsa.simg:272M:600M
+PARTITION:rootfsb:sparse:rootfsb.simg:872M:600M
+PARTITION:data:sparse:data.simg:1472M:0
 EOF
 
 # 打包成标准线刷包
@@ -93,6 +89,6 @@ done
 sudo rm -f *.img
 sudo rm -f *.gz
 
-echo "===== 线刷包打包完成 ====="
+echo "===== 4分区AB线刷包打包完成 ====="
 ls -lh
 echo "=========================="
