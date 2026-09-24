@@ -1,0 +1,30 @@
+From 40712c724c81440342b5b1d4010650d030f21c60 Mon Sep 17 00:00:00 2001
+From: Syrone Wong <wong.syrone@gmail.com>
+Date: Sat, 9 Apr 2022 00:44:00 +0800
+Subject: [PATCH] luci-app-firewall: add fullcone checkbox in wan zone
+
+Signed-off-by: Syrone Wong <wong.syrone@gmail.com>
+---
+ luasrc/model/cbi/firewall/zones.lua | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/luasrc/model/cbi/firewall/zones.lua b/luasrc/model/cbi/firewall/zones.lua
+index 3757111..8148278 100644
+--- a/luasrc/model/cbi/firewall/zones.lua
++++ b/luasrc/model/cbi/firewall/zones.lua
+@@ -211,6 +211,16 @@ m:option(Flag, "mtu_fix", translate("Enable MSS clamping"))
+ 	).default = 0
+ 	m:option(DummyValue, "_info", translate("Fixes PMTUd issues for VPN connections."))
+ 
++	o = m:option(Flag, "fullcone", translate("Enable FullCone NAT (UDP)"))
++	o.default = 0
++	o.rmempty = false
++	o.description = translate(
++		"FullCone NAT for UDP only. " ..
++		"Requires kmod-nft-fullcone kernel module, " ..
++		"only works with masquerade enabled on WAN zone."
++	)
++
+ return m
+--
+2.35.1
