@@ -3,13 +3,6 @@ set -e
 #=================================================
 # 玩客云 OpenWrt 固件 -> 标准 Amlogic 线刷包 转换脚本
 # 【AB分区：线刷仅烧写boot+rootfsa+data，rootfsb为OTA升级分区不烧写】
-# 分区偏移：
-# boot: start 16M , size 256M
-# rootfsa: start 272M, size 600M
-# rootfsb: start 872M, size 600M（线刷不写入，升级专用）
-# data: start 1472M, size=0(剩余全部)
-# 输出：.burn.img（USB Burning Tool 可直接线刷）
-# 配套输出：ext4-emmc.img.xz 晶晨宝盒手动升级包
 #=================================================
 echo "===== 开始打包标准 Amlogic 线刷包（仅烧写rootfsa，rootfsb保留作升级分区） ====="
 cd "$GITHUB_WORKSPACE"
@@ -27,12 +20,8 @@ rm -rf burn
 ./AmlImg unpack ./uboot.img burn/
 rm -f burn/*.simg
 echo "[5/8] 提取 OpenWrt 固件分区..."
-echo "===== DEBUG：查看openwrt软链接 ====="
-ls -la openwrt
-echo "===== DEBUG：搜索img.gz（-L跟随软链接） ====="
 IMG_GZ=$(find -L openwrt/bin/targets -maxdepth 3 -name "*.img.gz" | head -n1)
-echo "IMG_GZ变量结果: >${IMG_GZ}<"
-
+echo "IMG_GZ: ${IMG_GZ}"
 if [ -n "${IMG_GZ}" ]; then
   echo "✅ 找到gzip压缩固件: ${IMG_GZ}"
   gunzip -k "${IMG_GZ}"
@@ -43,25 +32,19 @@ if [ -n "${IMG_GZ}" ]; then
 else
   echo "ℹ️ 未找到img.gz，尝试查找裸img"
   RAW_IMG=$(find -L openwrt/bin/targets -maxdepth 3 -name "*.img" | head -n1)
-  echo "RAW_IMG变量结果: >${RAW_IMG}<"
   if [ -n "${RAW_IMG}" ]; then
     mv "${RAW_IMG}" openwrt.img
     diskimg="openwrt.img"
-    echo "✅ 找到裸img，重命名为 openwrt.img"
   else
     echo "ERROR: 找不到openwrt img.gz / img!"
     exit 1
   fi
 fi
-
 echo "OpenWrt raw镜像: $diskimg"
-# 生成晶晨宝盒升级包 img.xz
 echo "===== 生成晶晨宝盒 img.xz 升级包 ====="
 xz -9 --threads=0 -k "${diskimg}"
 sha256sum "${diskimg}.xz" > "${diskimg}.xz.sha"
 echo "晶晨宝盒升级包: ${diskimg}.xz"
-
-# 挂载镜像，只读取 p1 boot p2 rootfsa
 loop=$(sudo losetup --find --show --partscan "$diskimg")
 echo "循环设备: $loop"
 cleanup(){
@@ -70,41 +53,32 @@ sudo losetup -d "$loop" || true
 fi
 }
 trap cleanup EXIT
-
 echo "[6/8] 转换 sparse 格式并打包线刷包..."
-# 仅提取boot(p1) rootfsa(p2)，raw镜像无p4 data分区
 sudo img2simg "${loop}p1" burn/boot.simg
 sudo img2simg "${loop}p2" burn/rootfsa.simg
-# data分区由AmlImg自动新建空分区，不从raw镜像读取
 printf "PARTITION:boot:sparse:boot.simg:16M:256M\nPARTITION:rootfsa:sparse:rootfsa.simg:272M:600M\nPARTITION:data:raw::1472M:0\n" > burn/commands.txt
-
 echo "===== commands.txt 内容预览 ====="
 cat burn/commands.txt
 echo "================================="
 prefix="${diskimg%.img}"
 burnimg="${prefix}.burn.img"
 echo "输出线刷包: $burnimg"
-# ==========核心修复：AmlImg pack 参数顺序【输出文件】在前，【源目录】在后！==========
-cd burn
-./AmlImg pack "../${burnimg}" ./
-cd ..
-
+echo "burn目录内容:"
+ls -la burn/
+echo "执行打包命令: ./AmlImg pack $burnimg burn/"
+# ===== 关键：AmlImg pack 输出文件在前，源目录在后 =====
+./AmlImg pack "$burnimg" burn/
 echo "[7/8] 压缩线刷包并生成校验文件..."
 burn_dir=$(dirname "$burnimg")
 cd "$burn_dir"
 for f in *.burn.img; do
 sha256sum "$f" > "${f}.sha"
-# -k 保留原始burn.img，不删除
 xz -9 --threads=0 -k "$f"
 done
-# 可选：注释下面这行，保留原始openwrt img
-#sudo rm -f *.img
-#sudo rm -f *.gz
 echo "[8/8] 打包完成，列出全部产物："
 ls -lh
-echo "===== 线刷包打包完成（rootfsb不烧写，用于晶晨宝盒AB升级） ====="
+echo "===== 线刷包打包完成 ====="
 echo "产物说明："
 echo "  openwrt.img.xz            → 晶晨宝盒网页手动上传升级包"
 echo "  *.burn.img.xz             → USB Burning Tool 线刷包"
 echo "  *.sha                     → sha256校验文件"
-echo "=========================="
