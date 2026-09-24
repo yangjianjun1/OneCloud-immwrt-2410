@@ -1,0 +1,157 @@
+From e5660fb4ab44d902810c7f6681789f017556498a Mon Sep 17 00:00:00 2001
+From: Syrone Wong <wong.syrone@gmail.com>
+Date: Sat, 9 Apr 2022 00:38:51 +0800
+Subject: [PATCH] nftables: add fullcone expression support
+
+Signed-off-by: Syrone Wong <wong.syrone@gmail.com>
+---
+ include/linux/netfilter/nf_tables.h | 16 +++++++++++++++
+ include/statement.h                 |  1 +
+ src/netlink_delinearize.c          | 48 ++++++++++++++++++++++++++++++++
+ src/netlink_linearize.c            | 47 ++++++++++++++++++++++++++++++
+ src/parser_bison.y                 |  2 ++
+ src/scanner.l                      |  1 +
+ src/statement.c                    |  7 ++++++
+ src/statement.h                    |  1 +
+ 8 files changed, 123 insertions(+)
+
+diff --git a/include/linux/netfilter/nf_tables.h b/include/linux/netfilter/nf_tables.h
+index 8812276..8020190 100644
+--- a/include/linux/netfilter/nf_tables.h
++++ b/include/linux/netfilter/nf_tables.h
+@@ -1421,6 +1421,22 @@ enum nft_expr_type {
+  * @NFT_EXPR_TUNNEL: tunnel meta expression
+  */
+ #define NFT_EXPR_TUNNEL                24
++/**
++ * @NFT_EXPR_FULLCONE: fullcone nat expression
++ */
++#define NFT_EXPR_FULLCONE              25
++
++enum nft_fullcone_attributes {
++       NFTA_FULLCONE_UNSPEC,
++       __NFTA_FULLCONE_MAX
++};
++#define NFTA_FULLCONE_MAX              (__NFTA_FULLCONE_MAX - 1)
++
++enum nft_fullcone_flags {
++       NFT_FULLCONE_NONE       = 0,
++};
++
++#ifdef __KERNEL__
++static inline bool nft_expr_is_fullcone(const struct nft_expr *expr)
++{
++       return expr->ops->type == NFT_EXPR_FULLCONE;
++}
++#endif
+
+ enum nft_reject_types {
+        NFT_REJECT_ICMP_UNREACH,
+diff --git a/include/statement.h b/include/statement.h
+index 6c11725..d392098 100644
+--- a/include/statement.h
++++ b/include/statement.h
+@@ -121,6 +121,7 @@ enum stmt_type {
+        STMT_TUNNEL,
+        STMT_TUNNEL_KEY,
+        STMT_VLAN,
++       STMT_FULLCONE,
+ };
+
+ struct stmt {
+diff --git a/src/netlink_delinearize.c b/src/netlink_delinearize.c
+index 7768275..9b05085 100644
+--- a/src/netlink_delinearize.c
++++ b/src/netlink_delinearize.c
+@@ -1698,6 +1698,54 @@ static int expr_parse(struct nftnl_expr *nle, struct nft_parse_err *err,
+        case NFT_EXPR_TUNNEL:
+                stmt = stmt_tunnel_alloc();
+                break;
++       case NFT_EXPR_FULLCONE:
++               stmt = stmt_alloc(STMT_FULLCONE);
++               break;
++
+        default:
+                nft_parse_err(err, "unknown expression type %u", type);
+                return -1;
+        }
+diff --git a/src/netlink_linearize.c b/src/netlink_linearize.c
+index 1854473..46133c1 100644
+--- a/src/netlink_linearize.c
++++ b/src/netlink_linearize.c
+@@ -1542,6 +1542,53 @@ static int netlink_gen_stmt(struct netlink_ctx *ctx, struct stmt *stmt)
+                nftnl_expr_set_u32(nle, NFTNL_EXPR_TUNNEL_MODE, stmt->tunnel.mode);
+                break;
++       case STMT_FULLCONE:
++               nle = nftnl_expr_alloc("fullcone");
++               if (!nle)
++                       return -1;
++
++               ret = netlink_gen_expr(ctx, nle, stmt);
++               if (ret < 0)
++                       goto err;
++
++               ret = nftnl_rule_add_expr(ctx->rule, nle);
++               if (ret < 0)
++                       goto err;
++               break;
++
+        default:
+                netlink_error(ctx, "unknown statement type %d", stmt->type);
+                return -1;
+        }
+diff --git a/src/parser_bison.y b/src/parser_bison.y
+index 2983948..87482c0 100644
+--- a/src/parser_bison.y
++++ b/src/parser_bison.y
+@@ -1424,6 +1424,8 @@ primary_expr
+                {
+                        $$ = stmt_vlan_alloc($2, $3);
+                }
++       | FULLCONE
++               { $$ = stmt_alloc(STMT_FULLCONE); }
+        ;
+
+ vlan_proto:
+diff --git a/src/scanner.l b/src/scanner.l
+index c000001..230b255 100644
+--- a/src/scanner.l
++++ b/src/scanner.l
+@@ -753,6 +753,7 @@ vlan            { return VLAN; }
+ pcp             { return PCP; }
+ dei             { return DEI; }
+ tunnel          { return TUNNEL; }
++fullcone        { return FULLCONE; }
+ id              { return ID; }
+ ip              { return IP; }
+ ip6             { return IP6; }
+diff --git a/src/statement.c b/src/statement.c
+index c027463..112247b 100644
+--- a/src/statement.c
++++ b/src/statement.c
+@@ -1168,6 +1168,13 @@ void stmt_print(struct stmt *stmt, struct output_ctx *octx)
+                output(octx, "tunnel ");
+                stmt_tunnel_print(stmt, octx);
+                break;
++       case STMT_FULLCONE:
++               output(octx, "fullcone");
++               break;
++
+        default:
+                output(octx, "unknown statement %d", stmt->type);
+                break;
+        }
+diff --git a/src/statement.h b/src/statement.h
+index 55c1178..1019958 100644
+--- a/src/statement.h
++++ b/src/statement.h
+@@ -382,6 +382,7 @@ struct stmt *stmt_tunnel_alloc(void);
+ struct stmt *stmt_tunnel_key_alloc(void);
+ struct stmt *stmt_vlan_alloc(uint16_t id, uint16_t proto);
+ struct stmt *stmt_xfrm_alloc(enum xfrm_dir dir);
++struct stmt *stmt_alloc(enum stmt_type type);
+
+ void stmt_free(struct stmt *stmt);
+ bool stmt_is_constant(struct stmt *stmt);
+--
+2.35.1
