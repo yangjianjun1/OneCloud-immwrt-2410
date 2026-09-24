@@ -36,7 +36,6 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@main
-
     - name: Initialization environment
       env:
         DEBIAN_FRONTEND: noninteractive
@@ -50,40 +49,32 @@ jobs:
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
-
     - name: Clone source code
       working-directory: /workdir
       run: |
         df -hT $PWD
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
-
     - name: Load onecloud
       run: |
         [ -e target ] && cp -rf target openwrt/
-
     - name: Load custom feeds
       run: |
         [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
         chmod +x $DIY_P1_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
-
     - name: Update feeds
       run: cd openwrt && ./scripts/feeds update -a
-
     - name: Remove some feeds
       run: |
         chmod +x $DIY_P3_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P3_SH
-
     - name: Second update feed
       run: cd openwrt && ./scripts/feeds update -a
-
     - name: Install feeds
       run: cd openwrt && ./scripts/feeds install -a
-
     - name: Load custom configuration
       run: |
         [ -e files ] && mv files openwrt/files
@@ -91,14 +82,12 @@ jobs:
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
-
     - name: SSH connection to Actions
       uses: P3TERX/ssh2actions@v1.0.0
       if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
       env:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-
     - name: Download package
       id: package
       run: |
@@ -107,7 +96,6 @@ jobs:
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
-
     - name: Compile the firmware
       id: compile
       run: |
@@ -118,7 +106,6 @@ jobs:
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
-
         # 查找img镜像，打印固件目录文件名，存入环境变量传递给convert2.sh
         echo "============================================="
         echo "【固件编译成功】"
@@ -137,23 +124,19 @@ jobs:
           echo "警告：未找到 *.img 固件文件，请检查编译产出！"
         fi
         echo "============================================="
-
     - name: Generate direct burn
       run: |
         chmod +x $GITHUB_WORKSPACE/Scripts/convert2.sh
         $GITHUB_WORKSPACE/Scripts/convert2.sh
-
     - name: Check space usage
       if: (!cancelled())
       run: df -hT
-
     - name: Upload bin directory
       uses: actions/upload-artifact@main
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
         name: OpenWrt-l2410_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: openwrt/bin
-
     - name: Organize files
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
@@ -167,14 +150,12 @@ jobs:
         echo "FIRMWARE=${target_dirs[0]}" >> $GITHUB_ENV
         rm -rf "${target_dirs[0]}/packages"
         echo "status=success" >> $GITHUB_OUTPUT
-
     - name: Upload firmware directory
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
         name: OpenWrt-l2410_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
-
     - name: Generate release tag
       id: tag
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
@@ -186,14 +167,22 @@ jobs:
         echo "**源码分支**: ${{ env.REPO_BRANCH }}" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
 
+    - name: 列出FIRMWARE目录全部文件(带大小)
+      if: steps.tag.outputs.status == 'success' && !cancelled()
+      run: |
+        echo "==================== 固件目录完整文件树 ===================="
+        find ${{ env.FIRMWARE }} -type f -ls
+        echo "============================================================"
+
     - name: Upload firmware to release
-      uses: softprops/action-gh-release@master
+      uses: softprops/action-gh-release@v2
       if: steps.tag.outputs.status == 'success' && !cancelled()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ steps.tag.outputs.release_tag }}
         body_path: release.txt
+        fail_on_unmatched_files: false
         files: |
           ${{ env.FIRMWARE }}/*.xz
           ${{ env.FIRMWARE }}/*.sha
@@ -205,10 +194,10 @@ jobs:
         keep_minimum_runs: 5
 
     - name: Remove old Releases
-      uses: dev-drprasad/delete-older-releases@master
+      uses: mknejp/delete-older-releases@v0.5.0
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       with:
-        keep_latest: 5
+        retain_minimum: 5
         delete_tags: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
