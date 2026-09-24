@@ -122,6 +122,8 @@ jobs:
           ls -lh "${IMG_DIR}"
         else
           echo "警告：未找到 *.img 固件文件，请检查编译产出！"
+          # 列出整个target目录全部文件，方便排查
+          find bin/targets -type f
         fi
         echo "============================================="
     - name: Generate direct burn
@@ -193,11 +195,29 @@ jobs:
         retain_days: 7
         keep_minimum_runs: 5
 
-    - name: Remove old Releases
-      uses: mknejp/delete-older-releases@v0.5.0
+    - name: Remove old Releases（兼容Node24，保留最近5个Release）
+      uses: actions/github-script@v7
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       with:
-        retain_minimum: 5
-        delete_tags: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const { owner, repo } = context.repo;
+          const { data: releases } = await github.rest.repos.listReleases({
+            owner,
+            repo,
+            per_page: 100
+          });
+          // 过滤非草稿正式Release，按发布时间倒序
+          const validReleases = releases.filter(r => !r.draft).sort((a,b)=>new Date(b.published_at)-new Date(a.published_at));
+          const keepCount = 5;
+          const toDelete = validReleases.slice(keepCount);
+          console.log(`找到${validReleases.length}个正式Release，需要删除${toDelete.length}个`);
+          for(const rel of toDelete){
+            console.log("删除Release: ",rel.tag_name,rel.id);
+            await github.rest.repos.deleteRelease({owner,repo,release_id:rel.id});
+            try{
+              await github.rest.git.deleteRef({owner,repo,ref:`tags/${rel.tag_name}`});
+            }catch(e){
+              console.log("tag删除跳过：",e.message);
+            }
+          }
