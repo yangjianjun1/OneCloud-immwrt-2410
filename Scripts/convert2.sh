@@ -84,9 +84,9 @@ echo "================================="
 prefix="${diskimg%.img}"
 burnimg="${prefix}.burn.img"
 echo "输出线刷包: $burnimg"
-# 【核心修复】进入burn目录打包，输出到上级目录
+# ==========核心修复：AmlImg pack 参数顺序【输出文件】在前，【源目录】在后！==========
 cd burn
-./AmlImg pack ./ "../$burnimg"
+./AmlImg pack "../${burnimg}" ./
 cd ..
 
 echo "[7/8] 压缩线刷包并生成校验文件..."
