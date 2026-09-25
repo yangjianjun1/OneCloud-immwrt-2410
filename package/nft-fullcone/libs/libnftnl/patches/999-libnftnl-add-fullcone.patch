@@ -1,0 +1,44 @@
+diff --git a/src/expr/expr.c b/src/expr/expr.c
+index 3370792..782b277 100644
+--- a/src/expr/expr.c
++++ b/src/expr/expr.c
+@@ -44,6 +44,7 @@
+ #include "expr/immediate.h"
+ #include "expr/ct.h"
+ #include "expr/flow.h"
++#include "expr/fullcone.h"
+ #include "expr/objref.h"
+ #include "expr/state.h"
+ #include "expr/meta.h"
+@@ -114,6 +115,7 @@ static const struct nftnl_expr_ops *expr_ops[] = {
+ 	&nftnl_expr_ct_ops,
+ 	&nftnl_expr_flow_ops,
+ 	&nftnl_expr_objref_ops,
++	&nftnl_expr_fullcone_ops,
+ 	&nftnl_expr_state_ops,
+ 	&nftnl_expr_meta_ops,
+ 	&nftnl_expr_payload_ops,
+diff --git a/src/expr/Makefile.am b/src/expr/Makefile.am
+index 481d013..ad12357 100644
+--- a/src/expr/Makefile.am
++++ b/src/expr/Makefile.am
+@@ -28,6 +28,7 @@ libnftnl_expr_la_SOURCES =	\
+ 	ct.c			\
+ 	flow.c			\
+ 	objref.c		\
++	fullcone.c		\
+ 	state.c			\
+ 	meta.c			\
+ 	payload.c		\
+diff --git a/src/expr/expr.h b/src/expr/expr.h
+index 5444937..d331d56 100644
+--- a/src/expr/expr.h
++++ b/src/expr/expr.h
+@@ -10,6 +10,7 @@
+ #include "immediate.h"
+ #include "ct.h"
+ #include "flow.h"
++#include "fullcone.h"
+ #include "objref.h"
+ #include "state.h"
+ #include "meta.h"
