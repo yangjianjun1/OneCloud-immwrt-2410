@@ -49,28 +49,3 @@ sed -i "s/timezone='.*'/timezone='CST-8'/g" package/base-files/files/bin/config_
 sed -i "/.*timezone='CST-8'.*/a\ set system.@system[-1].zonename='Asia/Shanghai'" package/base-files/files/bin/config_generate
 # 修复 gen_aml_emmc_img.sh 权限丢失导致 Error 126
 chmod +x target/linux/amlogic/image/gen_aml_emmc_img.sh
-
-# 生成fullcone nft规则文件
-mkdir -p files/etc/nftables.d
-cat > files/etc/nftables.d/90-fullcone.nft <<'EOF'
-table inet fw4 {
-  chain srcnat {
-    ip saddr 192.168.50.0/24 oifname "wan" masquerade fullcone
-  }
-}
-EOF
-
-# ====================== FullCone NAT LuCI勾选框（方案1） ======================
-mkdir -p files/etc/config
-cat >> files/etc/config/firewall <<EOF
-
-config include fullcone
-        option type 'nft'
-        option path '/etc/nftables.d/90-fullcone.nft'
-        option enabled '1'
-EOF
-
-# 在LuCI防火墙概览页面添加FullCone NAT勾选框
-sed -i '/"Firewall - General"/a\
-o = s:option(Flag, "fullcone_enabled", translate("FullCone NAT"), translate("启用FullCone全锥NAT，需要内核nft-fullcone模块"));\
-o.rmempty = false;' feeds/luci/modules/luci-mod-network/view/firewall/overview.htm
