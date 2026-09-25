@@ -5,40 +5,14 @@ Subject: [PATCH] nftables: add fullcone expression support
 
 Signed-off-by: Syrone Wong <wong.syrone@gmail.com>
 ---
- include/linux/netfilter/nf_tables.h | 16 ++++++++++
- include/statement.h                 |  1 +
- src/netlink_delinearize.c           | 48 +++++++++++++++++++++++++++++
- src/netlink_linearize.c             |  7 +++++
- src/parser_bison.y                  | 28 +++++++++++++++--
- src/scanner.l                       |  1 +
- src/statement.c                     |  1 +
- 7 files changed, 100 insertions(+), 2 deletions(-)
+ include/statement.h       |  1 +
+ src/netlink_delinearize.c | 48 +++++++++++++++++++++++++++++++++
+ src/netlink_linearize.c   |  7 +++++
+ src/parser_bison.y        | 28 +++++++++++++++--
+ src/scanner.l             |  1 +
+ src/statement.c           |  1 +
+ 6 files changed, 84 insertions(+), 2 deletions(-)
 
-diff --git a/include/linux/netfilter/nf_tables.h b/include/linux/netfilter/nf_tables.h
-index c62e6ac5..6ca4cd53 100644
---- a/include/linux/netfilter/nf_tables.h
-+++ b/include/linux/netfilter/nf_tables.h
-@@ -1620,6 +1620,22 @@ enum nft_ng_attr {
-        NFT_NG_MAX
- };
-
-+/**
-+ * enum nft_fullcone_attributes - nftables fullcone nat expression
-+ *
-+ * @NFT_FULLCONE_REG_ADDR: source register for ip address
-+ * @NFT_FULLCONE_DEV: netdevice name
-+ */
-+enum nft_fullcone_attributes {
-+       NFT_FULLCONE_UNSPEC,
-+       NFT_FULLCONE_REG_ADDR,
-+       NFT_FULLCONE_DEV,
-+       __NFT_FULLCONE_MAX,
-+       NFT_FULLCONE_MAX = __NFT_FULLCONE_MAX -1,
-+};
-+
- /**
-  * enum nft_osf_attr - nftables osf expression
-  */
 diff --git a/include/statement.h b/include/statement.h
 index 8422300..3392236 100644
 --- a/include/statement.h
@@ -50,9 +24,9 @@ index 8422300..3392236 100644
 +       STMT_FULLCONE,
         STMT_OSF,
         STMT_TUNNEL,
-        STMT_IMMEDIATE,
+        STMT_FIB,
 diff --git a/src/netlink_delinearize.c b/src/netlink_delinearize.c
-index 371c32c..7532c34 100644
+index 371c32c..fa08484 100644
 --- a/src/netlink_delinearize.c
 +++ b/src/netlink_delinearize.c
 @@ -2047,6 +2047,54 @@ static int nftnl_stmt_osf_parse(struct netlink_delinearize *d,
@@ -185,7 +159,6 @@ index 1649440..452935c 100644
 @@ -1270,6 +1271,7 @@ objref          { return EXPR_OBJREF; }
 flow            { return EXPR_FLOW; }
 osf             { return EXPR_OSF; }
-+tunnel          { return EXPR_TUNNEL; }
 +fullconenat    { return EXPR_FULLCONE; }
  tunnel          { return EXPR_TUNNEL; }
  immediate      { return EXPR_IMMEDIATE; }
