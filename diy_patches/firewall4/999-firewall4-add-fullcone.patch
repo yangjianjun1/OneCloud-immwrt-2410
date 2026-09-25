@@ -1,0 +1,154 @@
+From aa3b56e289fba7425e649a608c333622ffd9c367 Mon Sep 17 00:00:00 2001
+From: Syrone Wong <wong.syrone@gmail.com>
+Date: Sat, 9 Apr 2022 13:24:19 +0800
+Subject: [PATCH] firewall4: add fullcone support
+
+fullcone is drop-in replacement of masq for non-udp traffic
+add runtime fullcone rule check, disable it globally if fullcone expr is invalid
+defaults.
+fullcone is the global switch, while zone.fullcone4 and
+zone.fullcone6 are switches for IPv4 and IPv6 respectively, most
+IPv6 traffic do NOT need this FullCone NAT functionality.
+---
+ root/etc/config/firewall |  6 ++++++
+ src/fw4/compile.lua     | 34 ++++++++++++++++++++++++++++++++++++
+ src/fw4/defs.lua        |  4 ++++
+ src/fw4/options.lua     | 12 ++++++++++++
+ src/fw4/zone.lua        | 28 ++++++++++++++++++++++++++++
+ 5 files changed, 84 insertions(+)
+
+diff --git a/root/etc/config/firewall b/root/etc/config/firewall
+index 4124113..e1d4161 100644
+--- a/root/etc/config/firewall
++++ b/root/etc/config/firewall
+@@ -10,6 +10,12 @@ config defaults
+        # option syn_flood '1'
+        # option syn_flood_rate '250'
+        # option syn_flood_burst '50'
++       # Enable fullcone NAT globally, individual zone still needs fullcone4/fullcone6
++       # option fullcone '0'
++
++       # Enable fullcone validation at startup, disable fullcone automatically if unsupported
++       # option fullcone_validate '1'
++
+
+ config zone
+        option name 'lan'
+        option network 'lan'
+diff --git a/src/fw4/compile.lua b/src/fw4/compile.lua
+index 4226788..b44690c 100644
+--- a/src/fw4/compile.lua
++++ b/src/fw4/compile.lua
+@@ -10,6 +10,7 @@ local nft = require "nft"
+ local util = require "util"
+ local zone = require "zone"
+ local rule = require "rule"
++local os = require "os"
+
+ local M = {}
+
+@@ -111,6 +112,39 @@ function M.compile()
+        local nftables = {}
+        local meta = {}
+
++       -- validate fullcone expression support
++       local fullcone_supported = true
++       if state.defaults.fullcone_validate ~= 0 then
++               local f = io.popen("nft -c 'add rule ip nat postrouting fullcone dummy ip saddr 127.0.0.1' 2>/dev/null; echo $?")
++               local ret = tonumber(f:read("*a"))
++               f:close()
++               if ret ~= 0 then
++                       fullcone_supported = false
++               end
++       end
++
++       if not fullcone_supported then
++               state.defaults.fullcone = 0
++               for _, z in ipairs(state.zones) do
++                       z.fullcone4 = 0
++                       z.fullcone6 = 0
++               end
++       end
++
++       if state.defaults.fullcone == 0 then
++               for _, z in ipairs(state.zones) do
++                       z.fullcone4 = 0
++                       z.fullcone6 = 0
++               end
++       end
++
+        table.insert(nftables, table.concat({
+                "table inet fw4 {",
+                "\tchain input {",
+diff --git a/src/fw4/defs.lua b/src/fw4/defs.lua
+index 9044288..7424340 100644
+--- a/src/fw4/defs.lua
++++ b/src/fw4/defs.lua
+@@ -18,6 +18,10 @@ local M = {
+        -- defaults
+        defaults = {
+                disable_ipv6 = 0,
++               fullcone = 0,
++               fullcone_validate = 1,
++
+                flow_offloading = 0,
+                flow_offloading_hw = 0,
+        },
+diff --git a/src/fw4/options.lua b/src/fw4/options.lua
+index 7151234..4941135 100644
+--- a/src/fw4/options.lua
++++ b/src/fw4/options.lua
+@@ -214,6 +214,12 @@ local fw4_options = {
+                        type = "bool",
+                        default = nil,
+                },
++               fullcone = {
++                       type = "bool",
++                       default = nil,
++               },
++               fullcone_validate = {
++                       type = "bool",
++                       default = nil,
++               },
+        },
+        zone = {
+                name = {
+@@ -287,6 +293,12 @@ local fw4_options = {
+                        type = "bool",
+                        default = nil,
+                },
++               fullcone4 = {
++                       type = "bool",
++                       default = nil,
++               },
++               fullcone6 = {
++                       type = "bool",
++                       default = nil,
++               },
+                masq = {
+                        type = "bool",
+                        default = nil,
+                },
+diff --git a/src/fw4/zone.lua b/src/fw4/zone.lua
+index 6418445..b014149 100644
+--- a/src/fw4/zone.lua
++++ b/src/fw4/zone.lua
+@@ -227,6 +227,34 @@ function M.nat_rules(z, family, src, dest)
+                        end
+                end
+
++               if family == 4 and z.fullcone4 == 1 then
++                       table.insert(rules, table.concat({
++                               "\t\t\tfullcone " .. z.name .. " ip saddr " .. src,
++                       }))
++               elseif family == 6 and z.fullcone6 == 1 then
++                       table.insert(rules, table.concat({
++                               "\t\t\tfullcone " .. z.name .. " ip6 saddr " .. src,
++                       }))
++               end
++
+                if z.masq == 1 then
+                        local masq_opts = {}
+
+--
+2.35.3
