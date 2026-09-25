@@ -22,7 +22,7 @@ git clone --depth 1 https://github.com/sirpdboy/luci-app-poweroffdevice.git pack
 # 拉取 luci-app-mosdns（含 mosdns 主程序 + v2dat）
 git clone --depth 1 https://github.com/sbwml/luci-app-mosdns.git package/chajian/mosdns
 
-## 从仓库本地复制 fullconenat-nft，不再在线拉取
+## 从仓库本地复制 fullconenat-nft
 cp -r $GITHUB_WORKSPACE/local_pkg/fullconenat-nft package/network/utils/
 
 #====调试打印====
@@ -54,12 +54,6 @@ sed -i "s/hostname='.*'/hostname='OneCloud'/g" "${CFG_GEN}"
 # 修改默认时区
 sed -i "s/timezone='.*'/timezone='CST-8'/g" "${CFG_GEN}"
 sed -i "/.*timezone='CST-8'.*/a\ set system.@system[-1].zonename='Asia/Shanghai'" "${CFG_GEN}"
-
-# OneCloud 晶晨脚本
-AML_SCRIPT="target/linux/amlogic/image/gen_aml_emmc_img.sh"
-if [ -f "${AML_SCRIPT}" ];then
-    chmod +x "${AML_SCRIPT}"
-fi
 
 echo "==== patch check fullcone keyword ====="
 grep fullcone feeds/luci/applications/luci-app-firewall/htdocs/luci-static/resources/view/firewall/zones.js
