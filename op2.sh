@@ -39,8 +39,10 @@ function merge_package(){
 }
 ## 提取 fullconenat-nft
 merge_package openwrt-24.10 https://github.com/immortalwrt/immortalwrt.git package/network/utils package/network/utils/fullconenat-nft
-# 拉immortal的luci，包含luci‑app‑firewall fullcone界面补丁
-merge_package openwrt-24.10 https://github.com/immortalwrt/luci.git feeds/luci feeds/luci
+cd feeds/luci/modules/luci-app-firewall
+wget -q https://raw.githubusercontent.com/immortalwrt/luci/openwrt-24.10/modules/luci-app-firewall/patches/0001-firewall-zone-add-fullcone-and-fullcone6-options.patch
+patch -p1 < 0001-firewall-zone-add-fullcone-and-fullcone6-options.patch
+cd ../../..
 # 修改默认 IP
 sed -i 's/192.168.50.1/192.168.50.23/g' package/base-files/files/bin/config_generate
 #sed -i 's/192.168.1.1/192.168.8.1/g' package/base-files/files/bin/config_generate
