@@ -1,0 +1,34 @@
+diff --git a/applications/luci-app-firewall/htdocs/luci-static/resources/view/firewall/zones.js b/applications/luci-app-firewall/htdocs/luci-static/resources/view/firewall/zones.js
+index 55652920..81579804 100644
+--- a/applications/luci-app-firewall/htdocs/luci-static/resources/view/firewall/zones.js
++++ b/applications/luci-app-firewall/htdocs/luci-static/resources/view/firewall/zones.js
+@@ -133,6 +133,16 @@ return view.extend({
+ 				},
+ 			},
+ 
++			 fullcone: {
++				title: _('Enable FullCone NAT'),
++				type: "boolean",
++				optional: true,
++			},
++			 fullcone6: {
++				title: _('Enable FullCone NAT (IPv6)'),
++				type: "boolean",
++				optional: true,
++			},
+ 			mtu_fix: {
+ 				title: _('Enable MSS clamping'),
+ 				type: "boolean",
+diff --git a/applications/luci-app-firewall/root/etc/uci-defaults/firewall b/applications/luci-app-firewall/root/etc/uci-defaults/firewall
+index 49d02055..954381c2 100755
+--- a/applications/luci-app-firewall/root/etc/uci-defaults/firewall
++++ b/applications/luci-app-firewall/root/etc/uci-defaults/firewall
+@@ -32,6 +32,8 @@ firewall.@zone[0].network='wan wan6'
+ firewall.@zone[0].input='REJECT'
+ firewall.@zone[0].output='ACCEPT'
+ firewall.@zone[0].forward='REJECT'
++firewall.@zone[0].fullcone='0'
++firewall.@zone[0].fullcone6='0'
+ firewall.@zone[0].masq='1'
+ firewall.@zone[0].mtu_fix='1'
+ 
