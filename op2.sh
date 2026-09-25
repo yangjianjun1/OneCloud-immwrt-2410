@@ -13,22 +13,7 @@
 rm -rf feeds/packages/lang/golang
 # 拉取新的 golang
 git clone https://github.com/sbwml/packages_lang_golang.git -b 26.x feeds/packages/lang/golang
-
-# 1. 拉取适配Linux6.6的nft‑fullcone(friendlyarm分支)
-rm -rf package/nft-fullcone
-git clone https://github.com/friendlyarm/nft-fullcone.git package/nft-fullcone
-
-# 2. libnftnl补丁：fullcone表达式
-mkdir -p package/libs/libnftnl/patches
-wget -O package/libs/libnftnl/patches/999-libnftnl-fullcone.patch https://raw.githubusercontent.com/fullcone-nat-nftables/openwrt-firewall4-with-fullcone/main/package/libs/libnftnl/patches/999-01-libnftnl-add-fullcone-expression-support.patch
-
-# 3. nftables 用户态补丁，24.10必须，否则nft不识别fullcone
-mkdir -p package/network/utils/nftables/patches
-wget -O package/network/utils/nftables/patches/999-nftables-fullcone.patch https://raw.githubusercontent.com/fullcone-nat-nftables/openwrt-firewall4-with-fullcone/main/package/network/utils/nftables/patches/999-01-nftables-add-fullcone-expression-support.patch
-
-echo "==== nft‑fullcone + libnftnl + nftables patches done ===="
 # 拉取 luci-app-poweroffdevice（master 分支即 24.10 JS 版）
-
 git clone https://github.com/sirpdboy/luci-app-poweroffdevice.git package/chajian/poweroffdevice
 # 拉取 luci-app-mosdns（含 mosdns 主程序 + v2dat）
 git clone https://github.com/sbwml/luci-app-mosdns.git package/chajian/mosdns
