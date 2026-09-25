@@ -48,17 +48,3 @@ sed -i "s/timezone='.*'/timezone='CST-8'/g" package/base-files/files/bin/config_
 sed -i "/.*timezone='CST-8'.*/a\ set system.@system[-1].zonename='Asia/Shanghai'" package/base-files/files/bin/config_generate
 # 修复 gen_aml_emmc_img.sh 权限丢失导致 Error 126
 chmod +x target/linux/amlogic/image/gen_aml_emmc_img.sh
-
-# ====================== Fullcone NAT 部分（补丁已预先放在 diy_patches） ======================
-PATCH_ROOT="$PWD/diy_patches"
-
-# 复制补丁到对应源码 patches 目录
-cp -f "${PATCH_ROOT}/libnftnl"/*.patch package/libs/libnftnl/patches/
-cp -f "${PATCH_ROOT}/nftables"/*.patch package/network/utils/nftables/patches/
-cp -f "${PATCH_ROOT}/firewall4"/*.patch package/network/config/firewall4/patches/
-cp -f "${PATCH_ROOT}/luci-app-firewall"/*.patch feeds/luci/applications/luci-app-firewall/patches/
-
-# 拉取 nft-fullcone 内核模块源码并软链接到package
-EXTERNAL_MOD="$PWD/external_nftfullcone"
-git clone https://github.com/fullcone-nat-nftables/nft-fullcone.git "${EXTERNAL_MOD}/nft-fullcone"
-ln -sf "${EXTERNAL_MOD}/nft-fullcone" package/nft-fullcone
