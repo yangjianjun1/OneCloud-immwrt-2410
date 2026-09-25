@@ -19,14 +19,3 @@ sed -i 's|^src-git luci https://git.openwrt.org/project/luci.*|src-git luci http
 # 其余改为稳定的 github 源
 sed -i 's|https://git.openwrt.org/feed/routing.git|https://github.com/openwrt/routing.git|g' feeds.conf.default
 sed -i 's|https://git.openwrt.org/feed/telephony.git|https://github.com/openwrt/telephony.git|g' feeds.conf.default
-# ========== nft-fullcone 6.6 适配代码（放在op1，feeds update前打补丁） ==========
-# 拉取适配Linux6.6的nft‑fullcone(friendlyarm分支)
-rm -rf package/nft-fullcone
-git clone https://github.com/friendlyarm/nft-fullcone.git package/nft-fullcone
-# libnftnl补丁：fullcone表达式，wget增加重试防止github raw超时
-mkdir -p package/libs/libnftnl/patches
-wget --retry-connrefused --tries=3 -O package/libs/libnftnl/patches/999-libnftnl-fullcone.patch https://raw.githubusercontent.com/fullcone-nat-nftables/openwrt-firewall4-with-fullcone/main/package/libs/libnftnl/patches/999-01-libnftnl-add-fullcone-expression-support.patch
-# nftables 用户态补丁，24.10必须，否则nft不识别fullcone
-mkdir -p package/network/utils/nftables/patches
-wget --retry-connrefused --tries=3 -O package/network/utils/nftables/patches/999-nftables-fullcone.patch https://raw.githubusercontent.com/fullcone-nat-nftables/openwrt-firewall4-with-fullcone/main/package/network/utils/nftables/patches/999-01-nftables-add-fullcone-expression-support.patch
-echo "==== nft‑fullcone + libnftnl + nftables patches done ===="
