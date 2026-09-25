@@ -14,16 +14,20 @@ set -eo pipefail
 # 删除自带的 golang
 rm -rf feeds/packages/lang/golang
 # 拉取新的 golang
-git clone https://github.com/sbwml/packages_lang_golang.git -b 26.x feeds/packages/lang/golang
+git clone --depth 1 https://github.com/sbwml/packages_lang_golang.git -b 26.x feeds/packages/lang/golang
 
 mkdir -p package/chajian
 # 拉取 luci-app-poweroffdevice（master 分支即 24.10 JS 版）
-git clone https://github.com/sirpdboy/luci-app-poweroffdevice.git package/chajian/poweroffdevice
+git clone --depth 1 https://github.com/sirpdboy/luci-app-poweroffdevice.git package/chajian/poweroffdevice
 # 拉取 luci-app-mosdns（含 mosdns 主程序 + v2dat）
-git clone https://github.com/sbwml/luci-app-mosdns.git package/chajian/mosdns
+git clone --depth 1 https://github.com/sbwml/luci-app-mosdns.git package/chajian/mosdns
 
 ## 从仓库本地复制 fullconenat-nft，不再在线拉取
 cp -r $GITHUB_WORKSPACE/local_pkg/fullconenat-nft package/network/utils/
+
+#====调试打印====
+echo "===== check fullconenat-nft ====="
+ls -la package/network/utils/fullconenat-nft
 
 ## 本地补丁添加FullCone NAT界面选项
 LUCI_FW_DIR="feeds/luci/applications/luci-app-firewall"
@@ -35,7 +39,9 @@ cd "${LUCI_FW_DIR}"
 patch -p1 < $GITHUB_WORKSPACE/patches/0001-firewall-zone-add-fullcone-and-fullcone6-options.patch
 cd ../../..
 
-CFG_GEN="package/base-files/files/sbin/config_generate"
+#====修正！！是 bin 不是 sbin====
+CFG_GEN="package/base-files/files/bin/config_generate"
+
 # 修改默认 IP
 sed -i 's/192.168.50.1/192.168.50.23/g' "${CFG_GEN}"
 #sed -i 's/192.168.1.1/192.168.8.1/g' "${CFG_GEN}"
@@ -49,8 +55,12 @@ sed -i "s/hostname='.*'/hostname='OneCloud'/g" "${CFG_GEN}"
 sed -i "s/timezone='.*'/timezone='CST-8'/g" "${CFG_GEN}"
 sed -i "/.*timezone='CST-8'.*/a\ set system.@system[-1].zonename='Asia/Shanghai'" "${CFG_GEN}"
 
-# 修复 gen_aml_emmc_img.sh 权限丢失导致 Error 126，文件不存在跳过
+# OneCloud 晶晨脚本
 AML_SCRIPT="target/linux/amlogic/image/gen_aml_emmc_img.sh"
 if [ -f "${AML_SCRIPT}" ];then
     chmod +x "${AML_SCRIPT}"
 fi
+
+echo "==== patch check fullcone keyword ====="
+grep fullcone feeds/luci/applications/luci-app-firewall/htdocs/luci-static/resources/view/firewall/zones.js
+echo "==== diy‑op2.sh finish ====="
