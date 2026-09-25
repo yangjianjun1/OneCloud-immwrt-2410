@@ -1,0 +1,85 @@
+diff --git a/src/parser_bison.y b/src/parser_bison.y
+index 8b28211..302b493 100644
+--- a/src/parser_bison.y
++++ b/src/parser_bison.y
+@@ -1667,6 +1667,11 @@ expr	:	EXPR_META meta_expr
+ 		|	EXPR_CT ct_expr
+ 		|	EXPR_FLOW flow_expr
+ 		|	EXPR_OBJREF objref_expr
++		|	EXPR_FULLCONE fullcone_expr
+ 		|	EXPR_STATE state_expr
+ 		|	EXPR_IMMEDIATE immediate_expr
+ 		|	EXPR_BITWISE bitwise_expr
+@@ -2602,6 +2607,11 @@ flow_expr	:	FLOW flow_stmt
+ 	{
+ 		$$ = $2;
+ 	}
++fullcone_expr	:	FULLCONE fullcone_stmt
++	{
++		$$ = $2;
++	}
++
+ objref_expr	:	OBJREF objref_stmt
+ 	{
+ 		$$ = $2;
+diff --git a/src/scanner.l b/src/scanner.l
+index a5c1050..e2b4120 100644
+--- a/src/scanner.l
++++ b/src/scanner.l
+@@ -852,6 +852,8 @@ addr		{ip6addr}|{ip4addr}|{domain}
+ "flow"			{ return FLOW; }
+ "objref"		{ return OBJREF; }
+ "state"			{ return STATE; }
++"fullcone"		{ return FULLCONE; }
++"FULLCONE"		{ return FULLCONE; }
+ "immediate"		{ return IMMEDIATE; }
+ "bitwise"		{ return BITWISE; }
+ "payload"		{ return PAYLOAD; }
+diff --git a/src/parser.h b/src/parser.h
+index 9012130..7ac211c 100644
+--- a/src/parser.h
++++ b/src/parser.h
+@@ -342,6 +342,7 @@ enum tokens {
+ 	FLOW,
+ 	OBJREF,
+ 	STATE,
++	FULLCONE,
+ 	IMMEDIATE,
+ 	BITWISE,
+ 	PAYLOAD,
+diff --git a/src/expr.c b/src/expr.c
+index 77709a1..24328c3 100644
+--- a/src/expr.c
++++ b/src/expr.c
+@@ -102,6 +102,7 @@ static const struct expr_ops expr_ops[] = {
+ 	&ct_expr_ops,
+ 	&flow_expr_ops,
+ 	&objref_expr_ops,
++	&fullcone_expr_ops,
+ 	&state_expr_ops,
+ 	&immediate_expr_ops,
+ 	&bitwise_expr_ops,
+diff --git a/src/expr.h b/src/expr.h
+index 4498020..d124245 100644
+--- a/src/expr.h
++++ b/src/expr.h
+@@ -152,6 +152,7 @@ extern const struct expr_ops ct_expr_ops;
+ extern const struct expr_ops flow_expr_ops;
+ extern const struct expr_ops objref_expr_ops;
+ extern const struct expr_ops state_expr_ops;
++extern const struct expr_ops fullcone_expr_ops;
+ extern const struct expr_ops immediate_expr_ops;
+ extern const struct expr_ops bitwise_expr_ops;
+ extern const struct expr_ops payload_expr_ops;
+diff --git a/src/Makefile.am b/src/Makefile.am
+index 17bc198..b7b0551 100644
+--- a/src/Makefile.am
++++ b/src/Makefile.am
+@@ -67,6 +67,7 @@ nft_SOURCES =		\
+ 	expr/ct.c		\
+ 	expr/flow.c		\
+ 	expr/objref.c		\
++	expr/fullcone.c		\
+ 	expr/state.c		\
+ 	expr/immediate.c	\
+ 	expr/bitwise.c		\
