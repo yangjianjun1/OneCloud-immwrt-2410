@@ -12,34 +12,16 @@
 
 # 删除自带的 golang
 rm -rf feeds/packages/lang/golang
+
 # 拉取新的 golang
 git clone https://github.com/sbwml/packages_lang_golang.git -b 26.x feeds/packages/lang/golang
+
 # 拉取 luci-app-poweroffdevice（master 分支即 24.10 JS 版）
 git clone --depth 1 https://github.com/sirpdboy/luci-app-poweroffdevice.git package/chajian/poweroffdevice
+
 # 拉取 luci-app-mosdns（含 mosdns 主程序 + v2dat）
 git clone --depth 1 https://github.com/sbwml/luci-app-mosdns.git package/chajian/mosdns
 
-## 从仓库本地复制 fullconenat-nft
-cp -r $GITHUB_WORKSPACE/local_pkg/fullconenat-nft package/network/utils/
-
-#====调试打印====
-echo "===== check fullconenat-nft ====="
-ls -la package/network/utils/fullconenat-nft
-
-## 本地补丁添加FullCone NAT界面选项
-LUCI_FW_DIR="feeds/luci/applications/luci-app-firewall"
-if [ ! -d "${LUCI_FW_DIR}" ];then
-    echo "ERROR: ${LUCI_FW_DIR} 目录不存在，请确认feeds已执行 ./scripts/feeds update -a && ./scripts/feeds install -a"
-    exit 1
-fi
-cd "${LUCI_FW_DIR}"
-patch -p1 < $GITHUB_WORKSPACE/patches/0001-firewall-zone-add-fullcone-and-fullcone6-options.patch
-cd ../../..
-
-#====修正！！是 bin 不是 sbin====
-CFG_GEN="package/base-files/files/bin/config_generate"
-
-## 筛选程序
 function merge_package(){
     # 参数1是分支名,参数2是库地址。所有文件下载到指定路径。
     # 同一个仓库下载多个文件夹直接在后面跟文件名或路径，空格分开。
