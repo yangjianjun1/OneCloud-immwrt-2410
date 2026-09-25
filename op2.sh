@@ -17,8 +17,6 @@ git clone https://github.com/sbwml/packages_lang_golang.git -b 26.x feeds/packag
 git clone https://github.com/sirpdboy/luci-app-poweroffdevice.git package/chajian/poweroffdevice
 # 拉取 luci-app-mosdns（含 mosdns 主程序 + v2dat）
 git clone https://github.com/sbwml/luci-app-mosdns.git package/chajian/mosdns
-# 拉取 yangjianjun1 luci-app-amlogic
-git clone https://github.com/yangjianjun1/luci-app-amlogic.git package/chajian/amlogic
 ## 筛选程序
 function merge_package(){
     # 参数1是分支名,参数2是库地址。所有文件下载到指定路径。
