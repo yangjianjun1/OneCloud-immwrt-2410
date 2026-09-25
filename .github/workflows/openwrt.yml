@@ -1,14 +1,10 @@
-#
-# https://github.com/P3TERX/Actions-OpenWrt
-#
-# File: .github/workflows/openwrt-bulder.yml
+## https://github.com/P3TERX/Actions-OpenWrt
+## File: .github/workflows/openwrt-bulder.yml
 # Description: Build OpenWrt using GitHub Actions
-#
-# Copyright (c) 2019-2024 P3TERX <https://p3terx.com>
-#
-# This is free software, licensed under the MIT License.
+## Copyright (c) 2019-2024 P3TERX <https://p3terx.com>
+## This is free software, licensed under the MIT License.
 # See /LICENSE for more information.
-#
+
 name: Build OneCloud
 on:
   repository_dispatch:
@@ -18,6 +14,7 @@ on:
         description: 'SSH connection to Actions'
         required: false
         default: 'false'
+
 env:
   REPO_URL: https://github.com/openwrt/openwrt.git
   REPO_BRANCH: openwrt-24.10
@@ -30,12 +27,14 @@ env:
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
+
 jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
     - name: Checkout
       uses: actions/checkout@main
+
     - name: Initialization environment
       env:
         DEBIAN_FRONTEND: noninteractive
@@ -49,32 +48,40 @@ jobs:
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
+
     - name: Clone source code
       working-directory: /workdir
       run: |
         df -hT $PWD
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
     - name: Load onecloud
       run: |
         [ -e target ] && cp -rf target openwrt/
+
     - name: Load custom feeds
       run: |
         [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
         chmod +x $DIY_P1_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
+
     - name: Update feeds
       run: cd openwrt && ./scripts/feeds update -a
+
     - name: Remove some feeds
       run: |
         chmod +x $DIY_P3_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P3_SH
+
     - name: Second update feed
       run: cd openwrt && ./scripts/feeds update -a
+
     - name: Install feeds
       run: cd openwrt && ./scripts/feeds install -a
+
     - name: Load custom configuration
       run: |
         [ -e files ] && mv files openwrt/files
@@ -82,12 +89,14 @@ jobs:
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
+
     - name: SSH connection to Actions
       uses: P3TERX/ssh2actions@v1.0.0
       if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
       env:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+
     - name: Download package
       id: package
       run: |
@@ -96,6 +105,7 @@ jobs:
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
+
     - name: Compile the firmware
       id: compile
       run: |
@@ -125,19 +135,23 @@ jobs:
           find bin/targets -type f
         fi
         echo "============================================="
+
     - name: Generate direct burn
       run: |
         chmod +x $GITHUB_WORKSPACE/Scripts/convert2.sh
         $GITHUB_WORKSPACE/Scripts/convert2.sh
+
     - name: Check space usage
       if: (!cancelled())
       run: df -hT
+
     - name: Upload bin directory
       uses: actions/upload-artifact@main
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
         name: OpenWrt-l2410_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: openwrt/bin
+
     - name: Organize files
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
@@ -151,12 +165,14 @@ jobs:
         echo "FIRMWARE=${target_dirs[0]}" >> $GITHUB_ENV
         rm -rf "${target_dirs[0]}/packages"
         echo "status=success" >> $GITHUB_OUTPUT
+
     - name: Upload firmware directory
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
         name: OpenWrt-l2410_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
+
     - name: Generate release tag
       id: tag
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
@@ -167,14 +183,16 @@ jobs:
         echo "**编译时间**: $(date +"%Y-%m-%d %H:%M")" >> release.txt
         echo "**源码分支**: ${{ env.REPO_BRANCH }}" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
+
     - name: 列出FIRMWARE目录全部文件(带大小)
       if: steps.tag.outputs.status == 'success' && !cancelled()
       run: |
         echo "==================== 固件目录完整文件树 ===================="
         find ${{ env.FIRMWARE }} -type f -ls
         echo "============================================================"
+
     - name: Upload firmware to release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       if: steps.tag.outputs.status == 'success' && !cancelled()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -185,13 +203,15 @@ jobs:
         files: |
           ${{ env.FIRMWARE }}/*.xz
           ${{ env.FIRMWARE }}/*.sha
+
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@main
       with:
         retain_days: 7
         keep_minimum_runs: 5
+
     - name: Remove old Releases（兼容Node24，保留最近5个Release）
-      uses: actions/github-script@v7
+      uses: actions/github-script@v8
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
