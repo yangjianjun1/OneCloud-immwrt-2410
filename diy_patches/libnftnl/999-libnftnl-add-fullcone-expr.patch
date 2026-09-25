@@ -5,12 +5,11 @@ Subject: [PATCH] libnftnl: add fullcone expression support
 
 Signed-off-by: Syrone Wong <wong.syrone@gmail.com>
 ---
- include/libnftnl/expr.h          |  6 ++++++
- include/linux/netfilter/nf_tables.h | 16 ++++++++++++++++
- src/Makefile.am                  |  1 +
- src/expr/fullcone.c              | 168 +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- src/expr_ops.c                   |  2 ++
- 5 files changed, 193 insertions(+)
+ include/libnftnl/expr.h |  6 ++++++
+ src/Makefile.am         |  1 +
+ src/expr/fullcone.c     | 168 +++++++++++++++++++++++++++++++++++++++++++++
+ src/expr_ops.c          |  2 ++
+ 4 files changed, 177 insertions(+)
  create mode 100644 src/expr/fullcone.c
 
 diff --git a/include/libnftnl/expr.h b/include/libnftnl/expr.h
@@ -32,31 +31,6 @@ index fba1210..0a3c6ca 100644
  #ifdef __cplusplus
  }
  #endif
-diff --git a/include/linux/netfilter/nf_tables.h b/include/linux/netfilter/nf_tables.h
-index 2f8b442..312d107 100644
---- a/include/linux/netfilter/nf_tables.h
-+++ b/include/linux/netfilter/nf_tables.h
-@@ -1620,6 +1620,22 @@ enum nft_ng_attr {
-        NFT_NG_MAX
- };
-
-+/**
-+ * enum nft_fullcone_attributes - nftables fullcone nat expression
-+ *
-+ * @NFT_FULLCONE_REG_ADDR: source register for ip address
-+ * @NFT_FULLCONE_DEV: netdevice name
-+ */
-+enum nft_fullcone_attributes {
-+       NFT_FULLCONE_UNSPEC,
-+       NFT_FULLCONE_REG_ADDR,
-+       NFT_FULLCONE_DEV,
-+       __NFT_FULLCONE_MAX,
-+       NFT_FULLCONE_MAX = __NFT_FULLCONE_MAX -1
-+};
-+
- /**
-  * enum nft_osf_attr - nftables osf expression
-  */
 diff --git a/src/Makefile.am b/src/Makefile.am
 index 582700a..245213c 100644
 --- a/src/Makefile.am
