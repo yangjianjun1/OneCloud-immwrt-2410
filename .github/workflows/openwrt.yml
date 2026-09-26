@@ -1,16 +1,28 @@
-name: 编译 OneCloud OpenWrt
+#
+# https://github.com/P3TERX/Actions-OpenWrt
+#
+# File: .github/workflows/openwrt-bulder.yml
+# Description: Build OpenWrt using GitHub Actions
+#
+# Copyright (c) 2019-2024 P3TERX <https://p3terx.com>
+#
+# This is free software, licensed under the MIT License.
+# See /LICENSE for more information.
+#
+
+name: Build OneCloud
+
 on:
   repository_dispatch:
   workflow_dispatch:
     inputs:
       ssh:
-        description: '开启 Actions SSH 调试连接'
+        description: 'SSH connection to Actions'
         required: false
         default: 'false'
-  schedule:
-    - cron: '0 16 10 * *'
+
 env:
-  REPO_URL: https://github.com/openwrt/openwrt.git
+  REPO_URL: https://github.com/immortalwrt/immortalwrt.git
   REPO_BRANCH: openwrt-24.10
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: onecloud.config
@@ -21,105 +33,208 @@ env:
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
-  CCACHE_DIR: /home/runner/.ccache
-  AMLIMG_VERSION: v0.3.2
-  UBOOT_TPL_URL: https://github.com/rmoyulong/u-boot-onecloud/releases/download/Onecloud_Uboot_23.12.24_18.15.09/eMMC.burn.img
+
 jobs:
   build:
     runs-on: ubuntu-22.04
+
     steps:
-      - name: 检出仓库代码
-        uses: actions/checkout@v4
-      - name: 加载编译缓存 ccache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.CCACHE_DIR }}
-          key: openwrt-ccache-${{ env.REPO_BRANCH }}
-      - name: 初始化编译环境
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: |
-          sudo rm -rf /etc/apt/sources.list.d/*
-          sudo apt-get update -qq
-          sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
-          bzip2 ccache cmake cpio curl device-tree-compiler flex gawk gcc-multilib gettext git gperf \
-          libncurses-dev libssl-dev libtool lz4 lzma make msmtp nano ninja-build patch pkgconf python3 \
-          python3-pip qemu-utils rsync sed subversion swig tar unzip wget xz-utils zlib1g-dev
-      - name: 克隆 OpenWrt 源码
-        run: |
-          set -eo pipefail
-          cd $GITHUB_WORKSPACE
-          git clone ${{ env.REPO_URL }} -b ${{ env.REPO_BRANCH }} openwrt
-      - name: 复制自定义配置与脚本
-        run: |
-          set -eo pipefail
-          cd $GITHUB_WORKSPACE
-          [ -d files ] && cp -rf files openwrt/
-          [ -f ${{ env.CONFIG_FILE }} ] && cp ${{ env.CONFIG_FILE }} openwrt/.config
-          [ -f ${{ env.DIY_P1_SH }} ] && chmod +x ${{ env.DIY_P1_SH }} && cp ${{ env.DIY_P1_SH }} openwrt/
-          [ -f ${{ env.DIY_P2_SH }} ] && chmod +x ${{ env.DIY_P2_SH }} && cp ${{ env.DIY_P2_SH }} openwrt/
-          [ -f ${{ env.DIY_P3_SH }} ] && chmod +x ${{ env.DIY_P3_SH }} && cp ${{ env.DIY_P3_SH }} openwrt/
-      - name: 第一阶段自定义脚本
-        run: |
-          cd $GITHUB_WORKSPACE/openwrt
-          [ -f ${{ env.DIY_P1_SH }} ] && ./${{ env.DIY_P1_SH }}
-      - name: 更新feeds
-        run: |
-          cd $GITHUB_WORKSPACE/openwrt
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
-      - name: 第二阶段自定义脚本
-        run: |
-          cd $GITHUB_WORKSPACE/openwrt
-          [ -f ${{ env.DIY_P2_SH }} ] && ./${{ env.DIY_P2_SH }}
-      - name: SSH调试
-        uses: P3TERX/ssh2actions@v1.0.0
-        if: github.event.inputs.ssh == 'true'
-      - name: 编译 OpenWrt
-        run: |
-          cd $GITHUB_WORKSPACE/openwrt
-          make defconfig
-          make -j$(nproc) V=s
+    - name: Checkout
+      uses: actions/checkout@main
 
-      - name: 生成直写镜像
-        run: |
-          set -eo pipefail
-          [ -f "$GITHUB_WORKSPACE/Scripts/convert2.sh" ] || { echo "convert2.sh 不存在，跳过"; exit 0; }
-          chmod +x $GITHUB_WORKSPACE/Scripts/convert2.sh
-          $GITHUB_WORKSPACE/Scripts/convert2.sh
+    - name: Initialization environment
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+        sudo docker image prune --all --force
+        sudo -E apt-get -qq update
+        sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
+        sudo -E apt-get -qq autoremove --purge
+        sudo -E apt-get -qq clean
+        sudo timedatectl set-timezone "$TZ"
+        sudo mkdir -p /workdir
+        sudo chown $USER:$GROUPS /workdir
 
-      - name: 准备Release正文
-        id: tag_release
-        if: ${{ env.UPLOAD_RELEASE == 'true' && !cancelled() }}
-        run: |
-          set -eo pipefail
-          echo "release_tag=OneCloud-$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
-          echo "📦 OneCloud OpenWrt 固件" > release_body.txt
-          echo "编译时间: $(date +"%Y-%m-%d %H:%M")" >> release_body.txt
-          echo "源码分支: ${{ env.REPO_BRANCH }}" >> release_body.txt
-          echo "" >> release_body.txt
-          echo "openwrt.img.xz      → 晶晨宝盒整盘刷写（全新/清空eMMC）" >> release_body.txt
-          echo "openwrt.burn.img.xz → USB Burning Tool线刷包（日常升级，保留分区表）" >> release_body.txt
-          echo "*.sha256            → SHA256校验文件" >> release_body.txt
-      - name: 上传固件到GitHub Release
-        uses: softprops/action-gh-release@v2
-        if: ${{ steps.tag_release.outputs.release_tag != '' && !cancelled() }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.tag_release.outputs.release_tag }}
-          body_path: release_body.txt
-          files: |
-            ${{ github.workspace }}/*.xz
-            ${{ github.workspace }}/*.sha256
-          draft: false
-          prerelease: false
-      - name: 上传制品到Artifacts
-        uses: actions/upload-artifact@v4
-        if: ${{ !cancelled() }}
-        with:
-          name: onecloud-openwrt-firmware
-          path: |
-            ${{ github.workspace }}/*.xz
-            ${{ github.workspace }}/*.sha256
-            ${{ github.workspace }}/openwrt/bin/targets
+    - name: Clone source code
+      working-directory: /workdir
+      run: |
+        df -hT $PWD
+        git clone $REPO_URL -b $REPO_BRANCH openwrt
+        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+    - name: Load onecloud
+      run: |
+        [ -e target ] && cp -rf target openwrt/
+
+    - name: Load custom feeds
+      run: |
+        [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
+        chmod +x $DIY_P1_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P1_SH
+
+    - name: Update feeds
+      run: cd openwrt && ./scripts/feeds update -a
+
+    - name: Remove some feeds
+      run: |
+        chmod +x $DIY_P3_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P3_SH
+
+    - name: Second update feed
+      run: cd openwrt && ./scripts/feeds update -a
+
+    - name: Install feeds
+      run: cd openwrt && ./scripts/feeds install -a
+
+    - name: Load custom configuration
+      run: |
+        [ -e files ] && mv files openwrt/files
+        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
+        chmod +x $DIY_P2_SH
+        cd openwrt
+        $GITHUB_WORKSPACE/$DIY_P2_SH
+
+    - name: SSH connection to Actions
+      uses: P3TERX/ssh2actions@v1.0.0
+      if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
+      env:
+        TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+
+    - name: Download package
+      id: package
+      run: |
+        cd openwrt
+        make defconfig
+        make download -j8
+        find dl -size -1024c -exec ls -l {} \;
+        find dl -size -1024c -exec rm -f {} \;
+
+    - name: Compile the firmware
+      id: compile
+      run: |
+        cd openwrt
+        echo -e "$(nproc) thread compile"
+        make -j$(nproc) || make -j1 || make -j1 V=s
+        echo "status=success" >> $GITHUB_OUTPUT
+        grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
+        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
+        echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+
+    - name: Generate direct burn
+      run: |
+          sudo apt install android-sdk-libsparse-utils
+          ver="v0.3.1"
+          curl -L -o ./AmlImg https://github.com/lxiaya/AmlImg/releases/download/$ver/AmlImg_${ver}_linux_amd64
+          chmod +x ./AmlImg
+          curl -L -o ./uboot.img https://github.com/lxiaya/u-boot-onecloud/releases/download/build-20230901-0443/eMMC.burn.img
+          ./AmlImg unpack ./uboot.img burn/
+          echo "::endgroup::"
+          gunzip openwrt/bin/targets/*/*/*.gz
+          diskimg=$(ls openwrt/bin/targets/*/*/*.img)
+          loop=$(sudo losetup --find --show --partscan $diskimg)
+          img_ext="openwrt.img"
+          img_mnt="xd"
+          rootfs_mnt="img"
+          boot_img=$1${img_ext}
+          boot_img_mnt=$1${img_mnt}
+          rootfs_img_mnt=$1${rootfs_mnt}
+          echo ${boot_img}
+          echo ${boot_img_mnt}
+          echo ${rootfs_img_mnt}
+          sudo rm -rf ${boot_img}
+          sudo rm -rf ${boot_img_mnt}
+          sudo rm -rf ${rootfs_img_mnt}
+          sudo dd if=/dev/zero of=${boot_img} bs=1M count=400
+          sudo mkfs.ext4 ${boot_img}
+          sudo mkdir ${boot_img_mnt}
+          sudo mkdir ${rootfs_img_mnt}
+          sudo mount ${boot_img} ${boot_img_mnt}
+          sudo mount ${loop}p2 ${rootfs_img_mnt}
+          cd ${rootfs_img_mnt}
+          sudo cp -r * ../${boot_img_mnt}
+          cd ..
+          sudo sync
+          sudo umount ${boot_img_mnt}
+          sudo umount ${rootfs_img_mnt}
+          sudo img2simg ${loop}p1 burn/boot.simg
+          sudo img2simg openwrt.img burn/rootfs.simg
+          sudo rm -rf *.img
+          sudo losetup -d $loop
+          cat <<EOF >>burn/commands.txt
+          PARTITION:boot:sparse:boot.simg
+          PARTITION:rootfs:sparse:rootfs.simg
+          EOF
+          prefix=$(ls openwrt/bin/targets/*/*/*.img | sed 's/\.img$//')
+          burnimg=${prefix}.burn.img
+          ./AmlImg pack $burnimg burn/
+          for f in openwrt/bin/targets/*/*/*.burn.img; do
+            sha256sum "$f" >"${f}.sha"
+            xz -9 --threads=0 --compress "$f"
+          done
+          sudo rm -rf openwrt/bin/targets/*/*/*.img
+          sudo rm -rf openwrt/bin/targets/*/*/*.gz
+
+    - name: Check space usage
+      if: (!cancelled())
+      run: df -hT
+
+    - name: Upload bin directory
+      uses: actions/upload-artifact@main
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
+      with:
+        name: ImmWrt-2410_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        path: openwrt/bin
+
+    - name: Organize files
+      id: organize
+      if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
+      run: |
+        cd openwrt/bin/targets/*/*
+        rm -rf packages
+        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+        echo "status=success" >> $GITHUB_OUTPUT
+
+    - name: Upload firmware directory
+      uses: actions/upload-artifact@main
+      if: steps.organize.outputs.status == 'success' && !cancelled()
+      with:
+        name: ImmWrt-2410_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        path: ${{ env.FIRMWARE }}
+
+    - name: Generate release tag
+      id: tag
+      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+      run: |
+        echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
+        touch release.txt
+        [ ${UPLOAD_GOFILE} = true && ${{ steps.gofile.outputs.url }} ] && echo "🔗 [GoFile](${{ steps.gofile.outputs.url }})" >> release.txt
+        echo "status=success" >> $GITHUB_OUTPUT
+
+    - name: Upload firmware to release
+      uses: softprops/action-gh-release@master
+      if: steps.tag.outputs.status == 'success' && !cancelled()
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.tag.outputs.release_tag }}
+        body_path: release.txt
+        files: ${{ env.FIRMWARE }}/*
+
+    - name: Delete workflow runs
+      uses: Mattraks/delete-workflow-runs@main
+      with:
+        retain_days: 5
+        keep_minimum_runs: 5
+
+    - name: Remove old Releases
+      uses: dev-drprasad/delete-older-releases@master
+      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+      with:
+        keep_latest:5
+        delete_tags: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
