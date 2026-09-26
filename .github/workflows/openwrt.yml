@@ -1,5 +1,4 @@
 name: 编译 OneCloud OpenWrt
-
 on:
   repository_dispatch:
   workflow_dispatch:
@@ -10,7 +9,6 @@ on:
         default: 'false'
   schedule:
     - cron: '0 16 10 * *'
-
 env:
   REPO_URL: https://github.com/openwrt/openwrt.git
   REPO_BRANCH: openwrt-24.10
@@ -26,37 +24,32 @@ env:
   CCACHE_DIR: /home/runner/.ccache
   AMLIMG_VERSION: v0.3.2
   UBOOT_TPL_URL: https://github.com/rmoyulong/u-boot-onecloud/releases/download/Onecloud_Uboot_23.12.24_18.15.09/eMMC.burn.img
-
 jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
       - name: 检出仓库代码
         uses: actions/checkout@v4
-
       - name: 加载编译缓存 ccache
         uses: actions/cache@v4
         with:
           path: ${{ env.CCACHE_DIR }}
           key: openwrt-ccache-${{ env.REPO_BRANCH }}
-
       - name: 初始化编译环境
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo rm -rf /etc/apt/sources.list.d/*
           sudo apt-get update -qq
-          sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
-          bzip2 ccache cmake cpio curl device-tree-compiler flex gawk gcc-multilib gettext git gperf \
-          libncurses-dev libssl-dev libtool lz4 lzma make msmtp nano ninja-build patch pkgconf python3 \
-          python3-pip qemu-utils rsync sed subversion swig tar unzip wget xz-utils zlib1g-dev
-
+          sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build‑essential \
+          bzip2 ccache cmake cpio curl device‑tree‑compiler flex gawk gcc‑multilib git gperf libncurses‑dev \
+          libssl‑dev libtool make msmtp nano ninja‑build patch pkgconf python3 python3‑pip qemu‑utils rsync sed \
+          subversion swig tar unzip wget xz‑utils zlib1g‑dev
       - name: 克隆 OpenWrt 源码
         run: |
           set -eo pipefail
           cd $GITHUB_WORKSPACE
           git clone ${{ env.REPO_URL }} -b ${{ env.REPO_BRANCH }} openwrt
-
       - name: 复制自定义配置与脚本
         run: |
           set -eo pipefail
@@ -66,121 +59,34 @@ jobs:
           [ -f ${{ env.DIY_P1_SH }} ] && chmod +x ${{ env.DIY_P1_SH }} && cp ${{ env.DIY_P1_SH }} openwrt/
           [ -f ${{ env.DIY_P2_SH }} ] && chmod +x ${{ env.DIY_P2_SH }} && cp ${{ env.DIY_P2_SH }} openwrt/
           [ -f ${{ env.DIY_P3_SH }} ] && chmod +x ${{ env.DIY_P3_SH }} && cp ${{ env.DIY_P3_SH }} openwrt/
-
       - name: 第一阶段自定义脚本
         run: |
           cd $GITHUB_WORKSPACE/openwrt
           [ -f ${{ env.DIY_P1_SH }} ] && ./${{ env.DIY_P1_SH }}
-
-      - name: 更新feeds
+      - name: 更新与安装 feeds
         run: |
           cd $GITHUB_WORKSPACE/openwrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a
-
       - name: 第二阶段自定义脚本
         run: |
           cd $GITHUB_WORKSPACE/openwrt
           [ -f ${{ env.DIY_P2_SH }} ] && ./${{ env.DIY_P2_SH }}
-
       - name: SSH调试
         uses: P3TERX/ssh2actions@v1.0.0
         if: github.event.inputs.ssh == 'true'
-
       - name: 编译 OpenWrt
         run: |
           cd $GITHUB_WORKSPACE/openwrt
           make defconfig
           make -j$(nproc) V=s
 
-      - name: 生成Amlogic晶晨线刷包 & 晶晨宝盒升级包
+      - name: 生成直写镜像
         run: |
-          set -euo pipefail
-          INIT_PWD=$(pwd)
-          WORK_BASE="${GITHUB_WORKSPACE}"
-          cd "${WORK_BASE}"
-
-          loop=""
-          diskimg=""
-          burn_out_dir="${WORK_BASE}"
-          AMLIMG_BIN="${WORK_BASE}/AmlImg"
-          UBOOT_TPL="${WORK_BASE}/uboot.img"
-          BURN_WORK="${WORK_BASE}/burn"
-
-          cleanup() {
-              if [[ -n "${loop:-}" && -b "${loop}" ]]; then
-                  echo "→ 释放回环设备 ${loop}"
-                  sudo losetup -d "${loop}" 2>/dev/null || true
-              fi
-          }
-          trap cleanup EXIT
-
-          echo "===== 开始打包标准 Amlogic 线刷包 ====="
-          echo "[1/8] 安装依赖工具..."
-          sudo apt update -qq
-          sudo apt install -y android-sdk-libsparse-utils xz-utils
-
-          echo "[2/8] 下载 AmlImg 工具 ${AMLIMG_VERSION}"
-          curl -fsSL -o "${AMLIMG_BIN}" "https://github.com/rmoyulong/AmlImg/releases/download/${AMLIMG_VERSION}/AmlImg_${AMLIMG_VERSION}_linux_amd64"
-          chmod +x "${AMLIMG_BIN}"
-
-          echo "[3/8] 下载玩客云 uboot 模板"
-          curl -fsSL -o "${UBOOT_TPL}" "${UBOOT_TPL_URL}"
-
-          echo "[4/8] 解压 uboot 模板"
-          rm -rf "${BURN_WORK}"
-          "${AMLIMG_BIN}" unpack "${UBOOT_TPL}" "${BURN_WORK}"
-          rm -f "${BURN_WORK}"/*.simg
-
-          echo "[5/8] 定位 OpenWrt raw镜像"
-          IMG_GZ=$(find -L openwrt/bin/targets -maxdepth 3 -name "*.img.gz" | head -n1)
-          if [[ -n "${IMG_GZ}" ]]; then
-              echo "✅ 找到 img.gz: ${IMG_GZ}"
-              gunzip -k "${IMG_GZ}"
-              RAW_IMG="${IMG_GZ%.gz}"
-              mv "${RAW_IMG}" "${WORK_BASE}/openwrt.img"
-              diskimg="${WORK_BASE}/openwrt.img"
-          else
-              echo "ℹ️ 未找到img.gz，查找裸img"
-              RAW_IMG=$(find -L openwrt/bin/targets -maxdepth 3 -name "*.img" | head -n1)
-              if [[ -n "${RAW_IMG}" ]]; then
-                  mv "${RAW_IMG}" "${WORK_BASE}/openwrt.img"
-                  diskimg="${WORK_BASE}/openwrt.img"
-              else
-                  echo "ERROR: 找不到 openwrt img / img.gz"
-                  exit 1
-              fi
-          fi
-          echo "✅ 源镜像: ${diskimg}"
-
-          echo "[6/8] 挂载回环设备，提取分区"
-          loop=$(sudo losetup --find --show --partscan "${diskimg}")
-          echo "loop设备: ${loop}"
-          [ -b "${loop}p1" ] || { echo "ERROR: 缺少p1 boot分区"; exit 1; }
-          [ -b "${loop}p2" ] || { echo "ERROR: 缺少p2 rootfs分区"; exit 1; }
-
-          sudo img2simg "${loop}p1" "${BURN_WORK}/boot.simg"
-          sudo img2simg "${loop}p2" "${BURN_WORK}/rootfsa.simg"
-
-          # 防止重复追加条目
-          if ! grep -q '^PARTITION:boot:' "${BURN_WORK}/commands.txt"; then
-              printf "PARTITION:boot:sparse:boot.simg\nPARTITION:rootfsa:sparse:rootfsa.simg\n" >> "${BURN_WORK}/commands.txt"
-          fi
-
-          echo "[7/8] 打包 burn.img"
-          BURN_IMG="${WORK_BASE}/openwrt.burn.img"
-          "${AMLIMG_BIN}" pack "${BURN_IMG}" "${BURN_WORK}"
-
-          echo "[8/8] 压缩并生成sha256校验"
-          xz -9 -k "${diskimg}"
-          xz -9 -k "${BURN_IMG}"
-          sha256sum openwrt.img.xz > openwrt.img.xz.sha256
-          sha256sum openwrt.burn.img.xz > openwrt.burn.img.xz.sha256
-
-          echo "===== 产物列表 ====="
-          ls -lh "${WORK_BASE}"/*.xz "${WORK_BASE}"/*.sha256
-
-          cd "${INIT_PWD}"
+          set -eo pipefail
+          [ -f "$GITHUB_WORKSPACE/Scripts/convert2.sh" ] || { echo "convert2.sh 不存在，跳过"; exit 0; }
+          chmod +x $GITHUB_WORKSPACE/Scripts/convert2.sh
+          $GITHUB_WORKSPACE/Scripts/convert2.sh
 
       - name: 准备Release正文
         id: tag_release
@@ -195,7 +101,6 @@ jobs:
           echo "openwrt.img.xz      → 晶晨宝盒整盘刷写（全新/清空eMMC）" >> release_body.txt
           echo "openwrt.burn.img.xz → USB Burning Tool线刷包（日常升级，保留分区表）" >> release_body.txt
           echo "*.sha256            → SHA256校验文件" >> release_body.txt
-
       - name: 上传固件到GitHub Release
         uses: softprops/action-gh-release@v2
         if: steps.tag_release.outputs.release_tag != '' && !cancelled()
@@ -209,7 +114,6 @@ jobs:
             ${{ github.workspace }}/*.sha256
           draft: false
           prerelease: false
-
       - name: 上传制品到Artifacts
         uses: actions/upload-artifact@v4
         if: !cancelled()
