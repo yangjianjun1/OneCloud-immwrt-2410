@@ -5,14 +5,14 @@
 ## This is free software, licensed under the MIT License.
 # See /LICENSE for more information.
 
-name: Build OneCloud
+name: 编译 OneCloud 固件
 
 on:
   repository_dispatch:
   workflow_dispatch:
     inputs:
       ssh:
-        description: 'SSH connection to Actions'
+        description: '开启SSH连接到Actions'
         required: false
         default: 'false'
 
@@ -26,64 +26,56 @@ env:
   DIY_P3_SH: op3.sh
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
-  UPLOAD_RELEASE: false
+  UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
 
 jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout
+      - name: 检出仓库代码
         uses: actions/checkout@main
 
-      - name: Initialization environment
+      - name: 初始化编译环境
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force
-          sudo -E apt-get -qq update
-          sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc git gperf haveged help2man intltool libc6-dev libelf-dev libtool libssl-dev libncurses5-dev libpython3-dev make msmtp ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools python3-setuptools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
-          sudo -E apt-get -qq autoremove --purge
-          sudo -E apt-get -qq clean
-          sudo timedatectl set-timezone "$TZ"
-          sudo mkdir -p /workdir
-          sudo chown $USER:$GROUPS /workdir
+          sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
 
-      - name: Clone source code
+      - name: 拉取源码
         working-directory: /workdir
         run: |
           df -hT $PWD
           git clone $REPO_URL -b $REPO_BRANCH openwrt
           ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
-      - name: Load onecloud
+      - name: 复制OneCloud设备文件
         run: |
           [ -e target ] && cp -rf target openwrt/
 
-      - name: Load custom feeds
+      - name: 加载自定义软件源配置并执行DIY脚本1
         run: |
           [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
           chmod +x $DIY_P1_SH
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P1_SH
 
-      - name: Update feeds
+      - name: 更新软件源
         run: cd openwrt && ./scripts/feeds update -a
 
-      - name: Remove some feeds
+      - name: 清理不需要的软件源，执行DIY脚本3
         run: |
           chmod +x $DIY_P3_SH
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P3_SH
 
-      - name: Second update feed
+      - name: 再次更新软件源
         run: cd openwrt && ./scripts/feeds update -a
 
-      - name: Install feeds
+      - name: 安装软件源
         run: cd openwrt && ./scripts/feeds install -a
 
-      - name: Load custom configuration
+      - name: 加载自定义配置文件，执行DIY脚本2
         run: |
           [ -e files ] && mv files openwrt/files
           [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
@@ -91,14 +83,14 @@ jobs:
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P2_SH
 
-      - name: SSH connection to Actions
+      - name: SSH远程调试
         uses: P3TERX/ssh2actions@v1.0.0
         if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh != 'false') || contains(github.event.action, 'ssh')
         env:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
-      - name: Download package
+      - name: 下载编译依赖包
         id: package
         run: |
           cd openwrt
@@ -107,12 +99,12 @@ jobs:
           find dl -size -1024c -exec ls -l {} \;
           find dl -size -1024c -exec rm -f {} \;
 
-      - name: Compile the firmware
+      - name: 编译固件
         id: compile
         run: |
           cd openwrt
-          echo -e "$(nproc) thread compile"
-          make -j$(nproc) || make -j1 || make -j1 V=s
+          echo -e "$(nproc) 线程编译"
+          make -j$(nproc) || make -j1 V=s
           echo "status=success" >> $GITHUB_OUTPUT
           grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
           [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
@@ -125,18 +117,18 @@ jobs:
           chmod +x $GITHUB_WORKSPACE/Scripts/convert2.sh
           $GITHUB_WORKSPACE/Scripts/convert2.sh
 
-      - name: Check space usage
+      - name: 查看磁盘占用
         if: (!cancelled())
         run: df -hT
 
-      - name: Upload bin directory
+      - name: 上传全部编译产物
         uses: actions/upload-artifact@main
         if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
         with:
           name: ImmWrt-2410_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
           path: openwrt/bin
 
-      - name: Organize firmware files
+      - name: 整理固件文件
         id: organize
         if: env.UPLOAD_FIRMWARE == 'true' && steps.compile.outputs.status == 'success'
         run: |
@@ -145,14 +137,14 @@ jobs:
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
           echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: Upload firmware directory
+      - name: 上传固件镜像
         uses: actions/upload-artifact@main
         if: steps.organize.outputs.status == 'success' && !cancelled()
         with:
           name: ImmWrt-2410_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
           path: ${{ env.FIRMWARE }}
 
-      - name: Generate release tag
+      - name: 生成Release标签
         id: tag
         if: env.UPLOAD_RELEASE == 'true' && !cancelled()
         run: |
@@ -160,7 +152,7 @@ jobs:
           touch release.txt
           echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: Upload firmware to release
+      - name: 发布到Release
         uses: softprops/action-gh-release@master
         if: steps.tag.outputs.status == 'success' && !cancelled()
         env:
@@ -170,13 +162,13 @@ jobs:
           body_path: release.txt
           files: ${{ env.FIRMWARE }}/*
 
-      - name: Delete workflow runs
+      - name: 清理旧工作流记录
         uses: Mattraks/delete-workflow-runs@main
         with:
           retain_days: 5
           keep_minimum_runs: 5
 
-      - name: Remove old Releases
+      - name: 删除旧Release版本
         uses: dev-drprasad/delete-older-releases@master
         if: env.UPLOAD_RELEASE == 'true' && !cancelled()
         with:
