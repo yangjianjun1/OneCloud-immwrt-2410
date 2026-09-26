@@ -126,7 +126,7 @@ jobs:
 
     - name: Generate direct burn
       run: |
-          ch$GITHUB_WORKSPACE/Scripts/convert2.sh
+          chmod +x $GITHUB_WORKSPACE/Scripts/convert2.sh
           $GITHUB_WORKSPACE/Scripts/convert2.sh
           
     - name: Check space usage
