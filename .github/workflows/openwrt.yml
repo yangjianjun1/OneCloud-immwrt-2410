@@ -41,10 +41,10 @@ jobs:
         run: |
           sudo rm -rf /etc/apt/sources.list.d/*
           sudo apt-get update -qq
-          sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build‑essential \
-          bzip2 ccache cmake cpio curl device‑tree‑compiler flex gawk gcc‑multilib git gperf libncurses‑dev \
-          libssl‑dev libtool make msmtp nano ninja‑build patch pkgconf python3 python3‑pip qemu‑utils rsync sed \
-          subversion swig tar unzip wget xz‑utils zlib1g‑dev
+          sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+          bzip2 ccache cmake cpio curl device-tree-compiler flex gawk gcc-multilib gettext git gperf \
+          libncurses-dev libssl-dev libtool lz4 lzma make msmtp nano ninja-build patch pkgconf python3 \
+          python3-pip qemu-utils rsync sed subversion swig tar unzip wget xz-utils zlib1g-dev
       - name: 克隆 OpenWrt 源码
         run: |
           set -eo pipefail
@@ -63,7 +63,7 @@ jobs:
         run: |
           cd $GITHUB_WORKSPACE/openwrt
           [ -f ${{ env.DIY_P1_SH }} ] && ./${{ env.DIY_P1_SH }}
-      - name: 更新与安装 feeds
+      - name: 更新feeds
         run: |
           cd $GITHUB_WORKSPACE/openwrt
           ./scripts/feeds update -a
@@ -90,7 +90,7 @@ jobs:
 
       - name: 准备Release正文
         id: tag_release
-        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+        if: ${{ env.UPLOAD_RELEASE == 'true' && !cancelled() }}
         run: |
           set -eo pipefail
           echo "release_tag=OneCloud-$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
@@ -103,7 +103,7 @@ jobs:
           echo "*.sha256            → SHA256校验文件" >> release_body.txt
       - name: 上传固件到GitHub Release
         uses: softprops/action-gh-release@v2
-        if: steps.tag_release.outputs.release_tag != '' && !cancelled()
+        if: ${{ steps.tag_release.outputs.release_tag != '' && !cancelled() }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -116,7 +116,7 @@ jobs:
           prerelease: false
       - name: 上传制品到Artifacts
         uses: actions/upload-artifact@v4
-        if: !cancelled()
+        if: ${{ !cancelled() }}
         with:
           name: onecloud-openwrt-firmware
           path: |
