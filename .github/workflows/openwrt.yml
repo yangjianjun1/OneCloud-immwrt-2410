@@ -1,5 +1,5 @@
 ## https://github.com/P3TERX/Actions-OpenWrt
-## 文件: .github/workflows/openwrt-builder.yml
+## 文件: .github/workflows/openwrt.yml
 # 说明: 使用 GitHub Actions 编译 OpenWrt
 ## 版权所有 (c) 2019-2024 P3TERX <https://p3terx.com>
 ## 这是免费软件，基于 MIT 协议开源
@@ -51,31 +51,33 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           set -eo pipefail
-          sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force
+          sudo rm -rf /etc/apt/sources.list.d/*
           sudo -E apt-get -qq update
-          sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libreadline-dev libssl-dev libtool lrzsz mkisofs msmtp ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
-          sudo -E apt-get -qq autoremove --purge
-          sudo -E apt-get -qq clean
-          sudo timedatectl set-timezone "$TZ"
-          sudo mkdir -p /workdir
-          sudo chown $USER:$GROUPS /workdir
+          sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler flex gawk gcc-multilib g++-multilib gettext git gzip libncurses5-dev libssl-dev libxml2-utils make msmtp nano ncurses-dev openssl patch perl python3 python3-pip python3-setuptools python3-dev rsync sed subversion swig tar unzip wget xz-utils zlib1g-dev
+          sudo docker image prune --all --force
 
       - name: 克隆 OpenWrt 源码
         working-directory: /workdir
         run: |
           set -eo pipefail
-          df -hT $PWD
-          git clone $REPO_URL -b $REPO_BRANCH openwrt
+          git clone ${{ env.REPO_URL }} -b ${{ env.REPO_BRANCH }} openwrt
+          cd openwrt
           ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
-      - name: 加载自定义软件源配置
+      - name: 复制自定义配置与脚本
         run: |
           set -eo pipefail
-          [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/
-          chmod +x $DIY_P1_SH
+          [ -d files ] && cp -rf files openwrt/
+          [ -f ${{ env.CONFIG_FILE }} ] && cp ${{ env.CONFIG_FILE }} openwrt/.config
+          [ -f ${{ env.DIY_P1_SH }} ] && chmod +x ${{ env.DIY_P1_SH }} && cp ${{ env.DIY_P1_SH }} openwrt/
+          [ -f ${{ env.DIY_P2_SH }} ] && chmod +x ${{ env.DIY_P2_SH }} && cp ${{ env.DIY_P2_SH }} openwrt/
+          [ -f ${{ env.DIY_P3_SH }} ] && chmod +x ${{ env.DIY_P3_SH }} && cp ${{ env.DIY_P3_SH }} openwrt/
+
+      - name: 执行第一阶段自定义脚本
+        run: |
+          set -eo pipefail
           cd openwrt
-          $GITHUB_WORKSPACE/$DIY_P1_SH
+          [ -f ${{ env.DIY_P1_SH }} ] && ./${{ env.DIY_P1_SH }}
 
       - name: 更新软件源 feeds
         run: |
@@ -87,23 +89,10 @@ jobs:
       - name: 执行第二阶段自定义脚本
         run: |
           set -eo pipefail
-          chmod +x $DIY_P2_SH
           cd openwrt
-          $GITHUB_WORKSPACE/$DIY_P2_SH
+          [ -f ${{ env.DIY_P2_SH }} ] && ./${{ env.DIY_P2_SH }}
 
-      - name: 执行第三阶段自定义脚本
-        run: |
-          set -eo pipefail
-          chmod +x $DIY_P3_SH
-          cd openwrt
-          $GITHUB_WORKSPACE/$DIY_P3_SH
-
-      - name: 导入固件配置文件
-        run: |
-          set -eo pipefail
-          [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
-
-      - name: SSH远程调试（手动开启才执行）
+      - name: SSH远程调试（按需开启）
         uses: P3TERX/ssh2actions@v1.0.0
         if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh != 'false') || contains(github.event.action, 'ssh')
         env:
@@ -130,7 +119,10 @@ jobs:
 
           echo "status=success" >> $GITHUB_OUTPUT
           grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
-          [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
+          if [ -s DEVICE_NAME ]; then
+            DEV_NAME=$(cat DEVICE_NAME)
+            echo "DEVICE_NAME=_${DEV_NAME}" >> $GITHUB_ENV
+          fi
           echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
           IMG_FILE=$(find bin/targets -maxdepth 3 \( -name "*.img.gz" -o -name "*.img" \) | head -n1)
@@ -143,17 +135,16 @@ jobs:
             echo "IMG_FILE=${IMG_FILE}" >> $GITHUB_ENV
             ls -lh "${IMG_DIR}"
           else
-            echo "❌ 警告：未找到 *.img / *.img.gz 固件文件，请检查编译产出！"
+            echo "❌ 警告：未找到 *.img / *.img.gz 固件文件"
             find bin/targets -type f
             exit 1
           fi
 
-      - name: 生成直写镜像
+      - name: 执行第三阶段脚本，生成直写镜像
         run: |
           set -eo pipefail
-          [ -f "$GITHUB_WORKSPACE/Scripts/convert2.sh" ] || { echo "convert2.sh 脚本不存在，跳过"; exit 0; }
-          chmod +x $GITHUB_WORKSPACE/Scripts/convert2.sh
-          $GITHUB_WORKSPACE/Scripts/convert2.sh
+          cd openwrt
+          [ -f $GITHUB_WORKSPACE/${{ env.DIY_P3_SH }} ] && $GITHUB_WORKSPACE/${{ env.DIY_P3_SH }}
 
       - name: 查看磁盘占用
         if: (!cancelled())
@@ -163,7 +154,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
         with:
-          name: OpenWrt-l2410_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+          name: OpenWrt-bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
           path: openwrt/bin
 
       - name: 整理固件目录
@@ -174,7 +165,7 @@ jobs:
           shopt -s nullglob
           target_dirs=(openwrt/bin/targets/*/*)
           if [ ${#target_dirs[@]} -eq 0 ]; then
-            echo "错误：未找到target输出目录"
+            echo "错误：未找到 targets 输出目录"
             exit 1
           fi
           echo "FIRMWARE=${target_dirs[0]}" >> $GITHUB_ENV
@@ -185,7 +176,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: steps.organize.outputs.status == 'success' && !cancelled()
         with:
-          name: OpenWrt-l2410_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+          name: OpenWrt-firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
           path: ${{ env.FIRMWARE }}
 
       - name: 生成Release标签与说明文档
@@ -194,15 +185,13 @@ jobs:
         run: |
           set -eo pipefail
           echo "release_tag=OneCloud-$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
-          cat > release.txt <<EOF
-📦 OpenWrt OneCloud 固件
-编译时间: $(date +"%Y-%m-%d %H:%M")
-源码分支: ${{ env.REPO_BRANCH }}
-触发方式: ${{ github.event_name }}
-EOF
+          echo "📦 OpenWrt OneCloud 固件" > release.txt
+          echo "编译时间: $(date +"%Y-%m-%d %H:%M")" >> release.txt
+          echo "源码分支: ${{ env.REPO_BRANCH }}" >> release.txt
+          echo "触发方式: ${{ github.event_name }}" >> release.txt
           echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: 列出全部固件文件
+      - name: 列出固件全部文件
         if: steps.tag.outputs.status == 'success' && !cancelled()
         run: |
           find ${{ env.FIRMWARE }} -type f -ls
@@ -222,7 +211,7 @@ EOF
             ${{ env.FIRMWARE }}/*.img
             ${{ env.FIRMWARE }}/*.img.gz
 
-      - name: 清理旧的工作流运行记录
+      - name: 清理旧工作流运行记录
         uses: Mattraks/delete-workflow-runs@v2
         with:
           retain_days: 7
