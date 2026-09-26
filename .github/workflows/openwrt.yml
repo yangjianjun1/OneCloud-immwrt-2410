@@ -1,10 +1,3 @@
-## https://github.com/P3TERX/Actions-OpenWrt
-## 文件: .github/workflows/openwrt.yml
-# 说明: 使用 GitHub Actions 编译 OpenWrt
-## 版权所有 (c) 2019-2024 P3TERX <https://p3terx.com>
-## 这是免费软件，基于 MIT 协议开源
-# 详见 /LICENSE 文件
-
 name: 编译 OneCloud OpenWrt
 
 on:
@@ -15,7 +8,6 @@ on:
         description: '开启 Actions SSH 调试连接'
         required: false
         default: 'false'
-  # 每月10日自动编译（北京时间10号0点 = UTC时间9号16点，Github cron使用UTC）
   schedule:
     - cron: '0 16 10 * *'
 
@@ -32,6 +24,8 @@ env:
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
   CCACHE_DIR: /home/runner/.ccache
+  AMLIMG_VERSION: v0.3.2
+  UBOOT_TPL_URL: https://github.com/rmoyulong/u-boot-onecloud/releases/download/Onecloud_Uboot_23.12.24_18.15.09/eMMC.burn.img
 
 jobs:
   build:
@@ -50,178 +44,178 @@ jobs:
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          set -eo pipefail
           sudo rm -rf /etc/apt/sources.list.d/*
-          sudo -E apt-get -qq update
-          sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler flex gawk gcc-multilib g++-multilib gettext git gzip libncurses5-dev libssl-dev libxml2-utils make msmtp nano ncurses-dev openssl patch perl python3 python3-pip python3-setuptools python3-dev rsync sed subversion swig tar unzip wget xz-utils zlib1g-dev
-          sudo docker image prune --all --force
+          sudo apt-get update -qq
+          sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+          bzip2 ccache cmake cpio curl device-tree-compiler flex gawk gcc-multilib gettext git gperf \
+          libncurses-dev libssl-dev libtool lz4 lzma make msmtp nano ninja-build patch pkgconf python3 \
+          python3-pip qemu-utils rsync sed subversion swig tar unzip wget xz-utils zlib1g-dev
 
       - name: 克隆 OpenWrt 源码
-        working-directory: /workdir
         run: |
           set -eo pipefail
+          cd $GITHUB_WORKSPACE
           git clone ${{ env.REPO_URL }} -b ${{ env.REPO_BRANCH }} openwrt
-          cd openwrt
-          ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
 
       - name: 复制自定义配置与脚本
         run: |
           set -eo pipefail
+          cd $GITHUB_WORKSPACE
           [ -d files ] && cp -rf files openwrt/
           [ -f ${{ env.CONFIG_FILE }} ] && cp ${{ env.CONFIG_FILE }} openwrt/.config
           [ -f ${{ env.DIY_P1_SH }} ] && chmod +x ${{ env.DIY_P1_SH }} && cp ${{ env.DIY_P1_SH }} openwrt/
           [ -f ${{ env.DIY_P2_SH }} ] && chmod +x ${{ env.DIY_P2_SH }} && cp ${{ env.DIY_P2_SH }} openwrt/
           [ -f ${{ env.DIY_P3_SH }} ] && chmod +x ${{ env.DIY_P3_SH }} && cp ${{ env.DIY_P3_SH }} openwrt/
 
-      - name: 执行第一阶段自定义脚本
+      - name: 第一阶段自定义脚本
         run: |
-          set -eo pipefail
-          cd openwrt
+          cd $GITHUB_WORKSPACE/openwrt
           [ -f ${{ env.DIY_P1_SH }} ] && ./${{ env.DIY_P1_SH }}
 
-      - name: 更新软件源 feeds
+      - name: 更新feeds
         run: |
-          set -eo pipefail
-          cd openwrt
+          cd $GITHUB_WORKSPACE/openwrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: 执行第二阶段自定义脚本
+      - name: 第二阶段自定义脚本
         run: |
-          set -eo pipefail
-          cd openwrt
+          cd $GITHUB_WORKSPACE/openwrt
           [ -f ${{ env.DIY_P2_SH }} ] && ./${{ env.DIY_P2_SH }}
 
-      - name: SSH远程调试（按需开启）
+      - name: SSH调试
         uses: P3TERX/ssh2actions@v1.0.0
-        if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh != 'false') || contains(github.event.action, 'ssh')
-        env:
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        if: github.event.inputs.ssh == 'true'
 
-      - name: 下载源码包
-        id: package
+      - name: 编译 OpenWrt
         run: |
-          set -eo pipefail
-          cd openwrt
+          cd $GITHUB_WORKSPACE/openwrt
           make defconfig
-          make download -j8
-          find dl -size -1024c -exec rm -f {} \;
+          make -j$(nproc) V=s
 
-      - name: 编译固件
-        id: compile
+      - name: 生成Amlogic晶晨线刷包 & 晶晨宝盒升级包
         run: |
-          set -eo pipefail
-          cd openwrt
-          echo "使用 $(nproc) 线程进行编译"
-          export PATH="/usr/lib/ccache:$PATH"
-          make -j$(nproc) || make -j1 || make -j1 V=s
+          set -euo pipefail
+          INIT_PWD=$(pwd)
+          WORK_BASE="${GITHUB_WORKSPACE}"
+          cd "${WORK_BASE}"
 
-          echo "status=success" >> $GITHUB_OUTPUT
-          grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
-          if [ -s DEVICE_NAME ]; then
-            DEV_NAME=$(cat DEVICE_NAME)
-            echo "DEVICE_NAME=_${DEV_NAME}" >> $GITHUB_ENV
-          fi
-          echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+          loop=""
+          diskimg=""
+          burn_out_dir="${WORK_BASE}"
+          AMLIMG_BIN="${WORK_BASE}/AmlImg"
+          UBOOT_TPL="${WORK_BASE}/uboot.img"
+          BURN_WORK="${WORK_BASE}/burn"
 
-          IMG_FILE=$(find bin/targets -maxdepth 3 \( -name "*.img.gz" -o -name "*.img" \) | head -n1)
-          if [ -n "${IMG_FILE}" ]; then
-            IMG_DIR=$(dirname "${IMG_FILE}")
-            IMG_NAME=$(basename "${IMG_FILE}")
-            echo "✅ 找到固件文件"
-            echo "固件目录: openwrt/${IMG_DIR}"
-            echo "固件文件名: ${IMG_NAME}"
-            echo "IMG_FILE=${IMG_FILE}" >> $GITHUB_ENV
-            ls -lh "${IMG_DIR}"
+          cleanup() {
+              if [[ -n "${loop:-}" && -b "${loop}" ]]; then
+                  echo "→ 释放回环设备 ${loop}"
+                  sudo losetup -d "${loop}" 2>/dev/null || true
+              fi
+          }
+          trap cleanup EXIT
+
+          echo "===== 开始打包标准 Amlogic 线刷包 ====="
+          echo "[1/8] 安装依赖工具..."
+          sudo apt update -qq
+          sudo apt install -y android-sdk-libsparse-utils xz-utils
+
+          echo "[2/8] 下载 AmlImg 工具 ${AMLIMG_VERSION}"
+          curl -fsSL -o "${AMLIMG_BIN}" "https://github.com/rmoyulong/AmlImg/releases/download/${AMLIMG_VERSION}/AmlImg_${AMLIMG_VERSION}_linux_amd64"
+          chmod +x "${AMLIMG_BIN}"
+
+          echo "[3/8] 下载玩客云 uboot 模板"
+          curl -fsSL -o "${UBOOT_TPL}" "${UBOOT_TPL_URL}"
+
+          echo "[4/8] 解压 uboot 模板"
+          rm -rf "${BURN_WORK}"
+          "${AMLIMG_BIN}" unpack "${UBOOT_TPL}" "${BURN_WORK}"
+          rm -f "${BURN_WORK}"/*.simg
+
+          echo "[5/8] 定位 OpenWrt raw镜像"
+          IMG_GZ=$(find -L openwrt/bin/targets -maxdepth 3 -name "*.img.gz" | head -n1)
+          if [[ -n "${IMG_GZ}" ]]; then
+              echo "✅ 找到 img.gz: ${IMG_GZ}"
+              gunzip -k "${IMG_GZ}"
+              RAW_IMG="${IMG_GZ%.gz}"
+              mv "${RAW_IMG}" "${WORK_BASE}/openwrt.img"
+              diskimg="${WORK_BASE}/openwrt.img"
           else
-            echo "❌ 警告：未找到 *.img / *.img.gz 固件文件"
-            find bin/targets -type f
-            exit 1
+              echo "ℹ️ 未找到img.gz，查找裸img"
+              RAW_IMG=$(find -L openwrt/bin/targets -maxdepth 3 -name "*.img" | head -n1)
+              if [[ -n "${RAW_IMG}" ]]; then
+                  mv "${RAW_IMG}" "${WORK_BASE}/openwrt.img"
+                  diskimg="${WORK_BASE}/openwrt.img"
+              else
+                  echo "ERROR: 找不到 openwrt img / img.gz"
+                  exit 1
+              fi
+          fi
+          echo "✅ 源镜像: ${diskimg}"
+
+          echo "[6/8] 挂载回环设备，提取分区"
+          loop=$(sudo losetup --find --show --partscan "${diskimg}")
+          echo "loop设备: ${loop}"
+          [ -b "${loop}p1" ] || { echo "ERROR: 缺少p1 boot分区"; exit 1; }
+          [ -b "${loop}p2" ] || { echo "ERROR: 缺少p2 rootfs分区"; exit 1; }
+
+          sudo img2simg "${loop}p1" "${BURN_WORK}/boot.simg"
+          sudo img2simg "${loop}p2" "${BURN_WORK}/rootfsa.simg"
+
+          # 防止重复追加条目
+          if ! grep -q '^PARTITION:boot:' "${BURN_WORK}/commands.txt"; then
+              printf "PARTITION:boot:sparse:boot.simg\nPARTITION:rootfsa:sparse:rootfsa.simg\n" >> "${BURN_WORK}/commands.txt"
           fi
 
-      - name: 执行第三阶段脚本，生成直写镜像
-        run: |
-          set -eo pipefail
-          cd openwrt
-          [ -f $GITHUB_WORKSPACE/${{ env.DIY_P3_SH }} ] && $GITHUB_WORKSPACE/${{ env.DIY_P3_SH }}
+          echo "[7/8] 打包 burn.img"
+          BURN_IMG="${WORK_BASE}/openwrt.burn.img"
+          "${AMLIMG_BIN}" pack "${BURN_IMG}" "${BURN_WORK}"
 
-      - name: 查看磁盘占用
-        if: (!cancelled())
-        run: df -hT
+          echo "[8/8] 压缩并生成sha256校验"
+          xz -9 -k "${diskimg}"
+          xz -9 -k "${BURN_IMG}"
+          sha256sum openwrt.img.xz > openwrt.img.xz.sha256
+          sha256sum openwrt.burn.img.xz > openwrt.burn.img.xz.sha256
 
-      - name: 上传完整bin目录产物
-        uses: actions/upload-artifact@v4
-        if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
-        with:
-          name: OpenWrt-bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
-          path: openwrt/bin
+          echo "===== 产物列表 ====="
+          ls -lh "${WORK_BASE}"/*.xz "${WORK_BASE}"/*.sha256
 
-      - name: 整理固件目录
-        id: organize
-        if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
-        run: |
-          set -eo pipefail
-          shopt -s nullglob
-          target_dirs=(openwrt/bin/targets/*/*)
-          if [ ${#target_dirs[@]} -eq 0 ]; then
-            echo "错误：未找到 targets 输出目录"
-            exit 1
-          fi
-          echo "FIRMWARE=${target_dirs[0]}" >> $GITHUB_ENV
-          rm -rf "${target_dirs[0]}/packages"
-          echo "status=success" >> $GITHUB_OUTPUT
+          cd "${INIT_PWD}"
 
-      - name: 上传固件文件夹
-        uses: actions/upload-artifact@v4
-        if: steps.organize.outputs.status == 'success' && !cancelled()
-        with:
-          name: OpenWrt-firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
-          path: ${{ env.FIRMWARE }}
-
-      - name: 生成Release标签与说明文档
-        id: tag
+      - name: 准备Release正文
+        id: tag_release
         if: env.UPLOAD_RELEASE == 'true' && !cancelled()
         run: |
           set -eo pipefail
           echo "release_tag=OneCloud-$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
-          echo "📦 OpenWrt OneCloud 固件" > release.txt
-          echo "编译时间: $(date +"%Y-%m-%d %H:%M")" >> release.txt
-          echo "源码分支: ${{ env.REPO_BRANCH }}" >> release.txt
-          echo "触发方式: ${{ github.event_name }}" >> release.txt
-          echo "status=success" >> $GITHUB_OUTPUT
-
-      - name: 列出固件全部文件
-        if: steps.tag.outputs.status == 'success' && !cancelled()
-        run: |
-          find ${{ env.FIRMWARE }} -type f -ls
+          echo "📦 OneCloud OpenWrt 固件" > release_body.txt
+          echo "编译时间: $(date +"%Y-%m-%d %H:%M")" >> release_body.txt
+          echo "源码分支: ${{ env.REPO_BRANCH }}" >> release_body.txt
+          echo "" >> release_body.txt
+          echo "openwrt.img.xz      → 晶晨宝盒整盘刷写（全新/清空eMMC）" >> release_body.txt
+          echo "openwrt.burn.img.xz → USB Burning Tool线刷包（日常升级，保留分区表）" >> release_body.txt
+          echo "*.sha256            → SHA256校验文件" >> release_body.txt
 
       - name: 上传固件到GitHub Release
-        uses: softprops/action-gh-release@v3
-        if: steps.tag.outputs.status == 'success' && !cancelled()
+        uses: softprops/action-gh-release@v2
+        if: steps.tag_release.outputs.release_tag != '' && !cancelled()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ steps.tag.outputs.release_tag }}
-          body_path: release.txt
-          fail_on_unmatched_files: false
+          tag_name: ${{ steps.tag_release.outputs.release_tag }}
+          body_path: release_body.txt
           files: |
-            ${{ env.FIRMWARE }}/*.xz
-            ${{ env.FIRMWARE }}/*.sha
-            ${{ env.FIRMWARE }}/*.img
-            ${{ env.FIRMWARE }}/*.img.gz
+            ${{ github.workspace }}/*.xz
+            ${{ github.workspace }}/*.sha256
+          draft: false
+          prerelease: false
 
-      - name: 清理旧工作流运行记录
-        uses: Mattraks/delete-workflow-runs@v2
+      - name: 上传制品到Artifacts
+        uses: actions/upload-artifact@v4
+        if: !cancelled()
         with:
-          retain_days: 7
-          keep_minimum_runs: 5
-
-      - name: 删除旧版本Release
-        uses: dev-drprasad/delete-older-releases@v0.3.4
-        continue-on-error: true
-        with:
-          keep_latest: 6
-          delete_tags: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: onecloud-openwrt-firmware
+          path: |
+            ${{ github.workspace }}/*.xz
+            ${{ github.workspace }}/*.sha256
+            ${{ github.workspace }}/openwrt/bin/targets
