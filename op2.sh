@@ -60,3 +60,5 @@ sed -i 's/NAME="%D"/NAME="OpenWrt"/g' package/base-files/files/usr/lib/os-releas
 sed -i 's/PRETTY_NAME="%D %V"/PRETTY_NAME="OpenWrt %V"/g' package/base-files/files/usr/lib/os-release
 sed -i 's/OPENWRT_RELEASE="%D %V %C"/OPENWRT_RELEASE="OpenWrt %V %C"/g' package/base-files/files/usr/lib/os-release
 
+# 修复 gen_aml_emmc_img.sh 权限丢失导致 Error 126
+chmod +x target/linux/amlogic/image/gen_aml_emmc_img.sh
