@@ -10,8 +10,8 @@
 # Description: OpenWrt DIY script part 1 (Before Update feeds)
 #
 set -e
-# 切换到标签 v24.10.8
-git checkout v24.10.8
+# 切换到标签 v24.10
+git checkout openwrt-24.10
 # 改为 ImmortalWrt 的 packages
 sed -i 's|^src-git packages https://git.openwrt.org/feed/packages.*|src-git packages https://github.com/immortalwrt/packages.git;openwrt-24.10|' feeds.conf.default
 # 改为 ImmortalWrt 的 luci
