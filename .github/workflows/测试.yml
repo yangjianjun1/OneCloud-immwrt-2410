@@ -9,7 +9,7 @@
 # This is free software, licensed under the MIT License.
 # See /LICENSE for more information.
 #
-name: Build OneCloud
+name: Build OneCloud 测试
 on:
   repository_dispatch:
   workflow_dispatch:
@@ -36,7 +36,6 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-
     - name: Initialization environment
       env:
         DEBIAN_FRONTEND: noninteractive
@@ -48,40 +47,32 @@ jobs:
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
-
     - name: Clone source code
       working-directory: /workdir
       run: |
         df -hT $PWD
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
-
     - name: Load onecloud target
       run: |
         [ -e target ] && cp -rf target openwrt/
-
     - name: Load custom feeds
       run: |
         [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
         chmod +x $DIY_P1_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
-
     - name: Update feeds
       run: cd openwrt && ./scripts/feeds update -a
-
     - name: Remove some feeds
       run: |
         chmod +x $DIY_P3_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P3_SH
-
     - name: Second update feed
       run: cd openwrt && ./scripts/feeds update -a
-
     - name: Install feeds
       run: cd openwrt && ./scripts/feeds install -a
-
     - name: Load custom configuration
       run: |
         [ -e files ] && mv files openwrt/files
@@ -89,14 +80,12 @@ jobs:
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
-
     - name: SSH connection to Actions
       uses: P3TERX/ssh2actions@v1.0.0
       if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
       env:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-
     - name: Download package source
       id: package
       run: |
@@ -105,7 +94,6 @@ jobs:
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
-
     - name: Compile the firmware
       id: compile
       run: |
@@ -123,10 +111,45 @@ jobs:
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
-    - name: Generate direct burn
+    # 提取rootfs并打包 rootfs.tar.gz
+    - name: Extract and compress rootfs
+      if: steps.compile.outputs.status == 'success' && !cancelled()
+      run: |
+        cd openwrt/bin/targets/*/*
+        ROOTFS_RAW=$(ls rootfs-*.tar 2>/dev/null | head -n1)
+        if [ -n "$ROOTFS_RAW" ];then
+          echo "Found rootfs raw: $ROOTFS_RAW"
+          mkdir -p rootfs_tmp
+          tar -xf "$ROOTFS_RAW" -C rootfs_tmp
+          tar -zcvf rootfs.tar.gz -C rootfs_tmp .
+          rm -rf rootfs_tmp
+          ls -lh rootfs.tar.gz
+        else
+          echo "Warning: rootfs-*.tar not found, skip rootfs.tar.gz generate"
+        fi
+
+    # 调用convert2.sh生成晶晨整盘包+线刷包
+    - name: Generate Amlogic img & burn.img (convert2.sh)
+      if: steps.compile.outputs.status == 'success' && !cancelled()
       run: |
         chmod +x $GITHUB_WORKSPACE/Scripts/convert2.sh
         $GITHUB_WORKSPACE/Scripts/convert2.sh
+
+    # 复制晶晨固件产物到target目录，用于Artifact & Release上传
+    - name: Copy amlogic firmware to target output dir
+      if: steps.compile.outputs.status == 'success' && !cancelled()
+      run: |
+        TARGET_OUT=$(find openwrt/bin/targets -maxdepth 2 -type d | head -n1)
+        cp -v $GITHUB_WORKSPACE/openwrt*.xz $GITHUB_WORKSPACE/openwrt*.sha "${TARGET_OUT}/"
+
+    # 打包全部feed编译ipk为 ipk-packages.tar.gz
+    - name: Archive all compiled ipk packages
+      if: steps.compile.outputs.status == 'success' && !cancelled()
+      run: |
+        TARGET_OUT=$(find openwrt/bin/targets -maxdepth 2 -type d | head -n1)
+        cd openwrt/bin
+        tar -zcvf "${TARGET_OUT}/ipk-packages.tar.gz" packages/
+        ls -lh "${TARGET_OUT}/ipk-packages.tar.gz"
 
     - name: Check space usage
       if: (!cancelled())
@@ -138,23 +161,19 @@ jobs:
       with:
         name: OpenWrt-i2410_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: openwrt/bin
-
     - name: Organize files
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true' && !cancelled() && steps.compile.outputs.status == 'success'
       run: |
         cd openwrt/bin/targets/*/*
-        tar -zcvf packages.tar.gz packages
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
-
     - name: Upload firmware directory
       uses: actions/upload-artifact@v4
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
         name: OpenWrt-i2410_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
-
     - name: Generate release tag
       id: tag
       if: env.UPLOAD_RELEASE == 'true' && !cancelled() && steps.compile.outputs.status == 'success'
@@ -164,7 +183,6 @@ jobs:
         echo "Firmware: OpenWrt 24.10 ${{ env.DEVICE_NAME }}" >> release.txt
         echo "Build Time: $(date +"%Y-%m-%d %H:%M")" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
-
     - name: Upload firmware to release
       uses: softprops/action-gh-release@v2
       if: steps.tag.outputs.status == 'success' && !cancelled() && steps.compile.outputs.status == 'success'
@@ -174,20 +192,18 @@ jobs:
         tag_name: ${{ steps.tag.outputs.release_tag }}
         body_path: release.txt
         files: ${{ env.FIRMWARE }}/*
-
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@v2
       with:
         retain_days: 7
         keep_minimum_runs: 2
-
-    # ========== 替换原来的 Remove old Releases，使用gh cli脚本 ==========
+    # ========== 保留最近5个Release，其余自动删除 ==========
     - name: Remove old Releases (gh cli)
       if: env.UPLOAD_RELEASE == 'true' && !cancelled() && steps.compile.outputs.status == 'success'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # 列出所有release，按发布时间倒序，取跳过前3个，剩下全部删除
+        # 列出所有release，按发布时间倒序，保留前5个，其余删除
         RELEASES=$(gh release list --json tagName,publishedAt --order desc | jq -r '.[5:] | .[].tagName')
         for TAG in $RELEASES; do
           echo "Delete Release: $TAG"
