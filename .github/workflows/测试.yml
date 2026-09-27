@@ -9,7 +9,7 @@
 # This is free software, licensed under the MIT License.
 # See /LICENSE for more information.
 #
-name: Build OneCloud 测试
+name: Build OneCloud
 on:
   repository_dispatch:
   workflow_dispatch:
@@ -41,7 +41,7 @@ jobs:
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
         sudo docker image prune --all --force
         sudo -E apt-get -qq update
         sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libncurses-dev libssl-dev libtool lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pip python3-ply python3-docutils qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
@@ -181,11 +181,17 @@ jobs:
         retain_days: 7
         keep_minimum_runs: 2
 
-    - name: Remove old Releases
-      uses: dev-drprasad/delete-older-releases@v2
+    # ========== 替换原来的 Remove old Releases，使用gh cli脚本 ==========
+    - name: Remove old Releases (gh cli)
       if: env.UPLOAD_RELEASE == 'true' && !cancelled() && steps.compile.outputs.status == 'success'
-      with:
-        keep_latest: 3
-        delete_tags: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        # 列出所有release，按发布时间倒序，取跳过前3个，剩下全部删除
+        RELEASES=$(gh release list --json tagName,publishedAt --order desc | jq -r '.[5:] | .[].tagName')
+        for TAG in $RELEASES; do
+          echo "Delete Release: $TAG"
+          gh release delete "$TAG" -y
+          echo "Delete git tag: $TAG"
+          git push origin --delete "$TAG"
+        done
