@@ -9,15 +9,17 @@
 # This is free software, licensed under the MIT License.
 # See /LICENSE for more information.
 #
-name: 编译 OneCloud 测试
+name: 编译 Build OneCloud 测试
 on:
   repository_dispatch:
   workflow_dispatch:
     inputs:
       ssh:
-        description: 'SSH连接到Actions环境'
+        description: 'SSH连接到Actions环境 | SSH connection to Actions'
         required: false
         default: 'false'
+  schedule:
+    - cron: '0 1 10 * *'
 env:
   REPO_URL: https://github.com/openwrt/openwrt.git
   REPO_BRANCH: openwrt-24.10
@@ -28,56 +30,56 @@ env:
   DIY_P3_SH: op3.sh
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
-  UPLOAD_RELEASE: true
+  UPLOAD_RELEASE: false
   TZ: Asia/Shanghai
 jobs:
   build:
+    name: 编译任务 build
     runs-on: ubuntu-22.04
     steps:
-    - name: 拉取仓库代码
+    - name: 拉取本仓库代码
       uses: actions/checkout@v4
     - name: 初始化编译环境
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
         sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
-        sudo docker image prune --all --force
+        sudo docker image prune -a
         sudo -E apt-get -qq update
-        sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib git gperf haveged help2man intltool libncurses-dev libssl-dev libtool lrzsz make nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pip python3-ply python3-docutils qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev
-    - name: 导入OneCloud设备Target文件
+        sudo -E apt-get -qq install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build‑essential bzip2 cmake cpio curl devscripts diffstat flex g++ gawk gettext git gperf libncurses‑dev libssl‑dev m4 make nano ncurses‑term pkg‑config python3‑python‑dotenv rsync scons sed unzip wget zlib1g‑dev
+    - name: 克隆OpenWrt源码
+      working‑directory: /workdir
       run: |
-        [ -e target ] && cp -rf target openwrt/
-    - name: 加载自定义feeds源并执行DIY脚本1
+        df -hT $PWD
+        git clone $REPO_URL openwrt
+        cd openwrt
+        git checkout $REPO_BRANCH
+        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+    - name: 导入配置文件
       run: |
-        [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
-        chmod +x $DIY_P1_SH
+        [ -e $CONFIG_FILE ] && cp $CONFIG_FILE openwrt/.config
+        [ -e $FEEDS_CONF ] && cp $FEEDS_CONF openwrt/feeds.conf.default
+        chmod +x $GITHUB_WORKSPACE/$DIY_P1_SH $GITHUB_WORKSPACE/$DIY_P2_SH $GITHUB_WORKSPACE/$DIY_P3_SH
+    - name: 执行DIY脚本1
+      run: |
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
-    - name: 更新feeds源
-      run: cd openwrt && ./scripts/feeds update -a
-    - name: 清理部分feeds源，执行DIY脚本3
+    - name: 更新feeds
       run: |
-        chmod +x $DIY_P3_SH
         cd openwrt
-        $GITHUB_WORKSPACE/$DIY_P3_SH
-    - name: 二次更新feeds源
-      run: cd openwrt && ./scripts/feeds update -a
-    - name: 安装feeds软件包
-      run: cd openwrt && ./scripts/feeds install -a
-    - name: 加载自定义配置文件，执行DIY脚本2
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+    - name: 执行DIY脚本2
       run: |
-        [ -e files ] && mv files openwrt/files
-        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
-        chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
-    - name: SSH远程连接调试
+    - name: SSH远程调试连接
       uses: P3TERX/ssh2actions@v1.0.0
       if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
       env:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-    - name: 下载软件包源码
+    - name: 预下载全部源码包
       id: package
       run: |
         cd openwrt
@@ -91,104 +93,60 @@ jobs:
         cd openwrt
         echo -e "$(nproc) thread compile"
         if ! make -j$(nproc); then
-            echo "make -j1 retry..."
-            if ! make -j1 V=s; then
-                echo "compile failed"
-                exit 1
-            fi
+            echo "make -j1 V=s retry..."
+            make -j1 V=s
         fi
         echo "status=success" >> $GITHUB_OUTPUT
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
-        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
-        echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
-
-    # 提取rootfs并打包 rootfs.tar.gz
-    - name: 提取并打包rootfs
-      if: steps.compile.outputs.status == 'success' && !cancelled()
-      run: |
-        cd openwrt/bin/targets/*/*
-        ROOTFS_RAW=$(ls rootfs-*.tar 2>/dev/null | head -n1)
-        if [ -n "$ROOTFS_RAW" ];then
-          echo "Found rootfs raw: $ROOTFS_RAW"
-          mkdir -p rootfs_tmp
-          tar -xf "$ROOTFS_RAW" -C rootfs_tmp
-          tar -zcvf rootfs.tar.gz -C rootfs_tmp .
-          rm -rf rootfs_tmp
-          ls -lh rootfs.tar.gz
-        else
-          echo "Warning: rootfs-*.tar not found, skip rootfs.tar.gz generate"
-        fi
-
-    # 调用convert2.sh生成晶晨整盘包+线刷包
-    - name: 生成晶晨整盘镜像与线刷固件
+        [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_OUTPUT
+        echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_OUTPUT
+    - name: 生成晶晨线刷镜像
       if: steps.compile.outputs.status == 'success' && !cancelled()
       run: |
         chmod +x $GITHUB_WORKSPACE/Scripts/convert2.sh
         $GITHUB_WORKSPACE/Scripts/convert2.sh
-
-    # 复制晶晨固件产物到target目录，用于Artifact & Release上传
-    - name: 复制晶晨固件输出文件
-      if: steps.compile.outputs.status == 'success' && !cancelled()
-      run: |
-        TARGET_OUT=$(find openwrt/bin/targets -maxdepth 2 -type d | head -n1)
-        cp -v $GITHUB_WORKSPACE/openwrt*.xz $GITHUB_WORKSPACE/openwrt*.sha "${TARGET_OUT}/"
-
-    - name: 查看磁盘空间占用
+    - name: 查看磁盘空间
       if: (!cancelled())
       run: df -hT
-
-    - name: 上传bin全部目录产物
+    - name: 上传bin目录工件
       uses: actions/upload-artifact@v4
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
-        name: OpenWrt-i2410_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        name: openwrt_bin${{ steps.compile.outputs.FILE_DATE }}
         path: openwrt/bin
-    - name: 整理固件输出路径
-      id: organize
-      if: env.UPLOAD_FIRMWARE == 'true' && !cancelled() && steps.compile.outputs.status == 'success'
-      run: |
-        cd openwrt/bin/targets/*/*
-        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
-        echo "status=success" >> $GITHUB_OUTPUT
-    - name: 上传固件Artifact
+    - name: 上传固件工件
       uses: actions/upload-artifact@v4
-      if: steps.organize.outputs.status == 'success' && !cancelled()
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_FIRMWARE == 'true'
       with:
-        name: OpenWrt-i2410_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
-        path: ${{ env.FIRMWARE }}
-    - name: 生成Release标签信息
+        name: openwrt_firmware${{ steps.compile.outputs.FILE_DATE }}
+        path: openwrt/bin/targets
+    - name: 生成Release信息
       id: tag
-      if: env.UPLOAD_RELEASE == 'true' && !cancelled() && steps.compile.outputs.status == 'success'
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true'
       run: |
-        echo "release_tag=$(date +"%Y.%m.%d-%H%M")${{ env.DEVICE_NAME }}_OpenWrt24.10" >> $GITHUB_OUTPUT
-        touch release.txt
-        echo "固件版本: OpenWrt 24.10 ${{ env.DEVICE_NAME }}" >> release.txt
-        echo "编译时间: $(date +"%Y-%m-%d %H:%M:%S")" >> release.txt
+        echo "release_tag=$(date +"%Y.%m.%d-%H%M")${{ steps.compile.outputs.DEVICE_NAME }}" >> $GITHUB_OUTPUT
         echo "status=success" >> $GITHUB_OUTPUT
-    - name: 上传固件到Release
+    - name: 发布到Github Release
       uses: softprops/action-gh-release@v2
-      if: steps.tag.outputs.status == 'success' && !cancelled() && steps.compile.outputs.status == 'success'
+      if: steps.tag.outputs.status == 'success'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ steps.tag.outputs.release_tag }}
-        body_path: release.txt
-        files: ${{ env.FIRMWARE }}/*
-    - name: 自动清理旧的Workflow运行记录
+        name: OpenWrt ${{ steps.compile.outputs.FILE_DATE }}
+        files: openwrt/bin/targets/**/*
+    - name: 清理旧Workflow运行记录
       uses: Mattraks/delete-workflow-runs@v2
       with:
         retain_days: 7
         keep_minimum_runs: 2
-    # ========== 保留最近5个Release，其余自动删除 ==========
-    - name: 删除旧版本Release
-      if: env.UPLOAD_RELEASE == 'true' && !cancelled() && steps.compile.outputs.status == 'success'
+    - name: 删除旧Release版本
+      if: env.UPLOAD_RELEASE == 'true' && steps.compile.outputs.status == 'success' && !cancelled()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        # 列出所有release，按发布时间倒序，保留前5个，其余删除
         RELEASE_TAGS=$(gh release list --json tagName,publishedAt --order desc | jq -r '.[5:] | .[].tagName')
         for TAG in $RELEASE_TAGS; do
-          echo "正在删除旧Release: $TAG"
+          echo "删除旧Release: $TAG"
           gh release delete "$TAG" -y
-          git push origin --delete "$TAG"
         done
