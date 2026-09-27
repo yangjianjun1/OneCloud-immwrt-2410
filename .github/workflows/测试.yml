@@ -9,7 +9,7 @@
 # This is free software, licensed under the MIT License.
 # See /LICENSE for more information.
 #
-name: 编译 Build OneCloud 测试
+name: 编译 Build OneCloud
 on:
   repository_dispatch:
   workflow_dispatch:
@@ -46,9 +46,9 @@ jobs:
         sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
         sudo docker image prune -a
         sudo -E apt-get -qq update
-        sudo -E apt-get -qq install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build‑essential bzip2 cmake cpio curl devscripts diffstat flex g++ gawk gettext git gperf libncurses‑dev libssl‑dev m4 make nano ncurses‑term pkg‑config python3‑python‑dotenv rsync scons sed unzip wget zlib1g‑dev
+        sudo -E apt-get -qq install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 cmake cpio curl devscripts diffstat flex g++ gawk gettext git gperf libncurses-dev libssl-dev m4 make nano ncurses-term pkg-config python3-python-dotenv rsync scons sed unzip wget zlib1g-dev
     - name: 克隆OpenWrt源码
-      working‑directory: /workdir
+      working-directory: /workdir
       run: |
         df -hT $PWD
         git clone $REPO_URL openwrt
