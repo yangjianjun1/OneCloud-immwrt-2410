@@ -4,7 +4,6 @@ setenv dtb_loadaddr "0x21800000"
 setenv dtb_name "dtb"
 setenv boot_start "bootm ${kernel_loadaddr} - ${dtb_loadaddr}"
 
-# U盘 usb0
 if usb start; then
     if fatload usb 0 ${kernel_loadaddr} uImage &&
        fatload usb 0 ${dtb_loadaddr} ${dtb_name} &&
@@ -13,31 +12,8 @@ if usb start; then
     fi
 fi
 
-# eMMC A/B mmc1
-if test ${boot_part_next} -eq 0; then
-    setenv rootdev "/dev/mmcblk1p2"
-else
-    setenv rootdev "/dev/mmcblk1p3"
-fi
-setenv bootargs_emmc "root=${rootdev} rootwait ro ${condev} fsck.repair=yes net.ifnames=0"
-
 if fatload mmc 1 ${kernel_loadaddr} uImage &&
    fatload mmc 1 ${dtb_loadaddr} ${dtb_name} &&
-   setenv bootargs ${bootargs_emmc}; then
-    setenv boot_part ${boot_part_next}
-    setenv boot_part_trycount 3
-    saveenv
+   setenv bootargs "root=/dev/mmcblk1p2 rootwait ro ${condev} fsck.repair=yes net.ifnames=0"; then
     run boot_start
-else
-    setenv boot_part_trycount ${boot_part_trycount} - 1
-    if test ${boot_part_trycount} -le 0; then
-        if test ${boot_part_next} -eq 0; then
-            setenv boot_part_next 1
-        else
-            setenv boot_part_next 0
-        fi
-        setenv boot_part_trycount 3
-    fi
-    saveenv
 fi
-
