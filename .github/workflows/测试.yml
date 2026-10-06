@@ -18,7 +18,6 @@ on:
         description: 'SSH connection to Actions'
         required: false
         default: 'false'
-
 env:
   REPO_URL: https://github.com/openwrt/openwrt.git
   REPO_BRANCH: openwrt-24.10
@@ -32,14 +31,12 @@ env:
   UPLOAD_RELEASE: true
   UPLOAD_GOFILE: false
   TZ: Asia/Shanghai
-
 jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Cache ccache
         uses: actions/cache@v4
         with:
@@ -48,7 +45,6 @@ jobs:
           key: ${{ github.job }}-ccache-${{ github.sha }}
           restore-keys: |
             ${{ github.job }}-ccache-
-
       - name: Initialization environment
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -67,40 +63,32 @@ jobs:
           sudo timedatectl set-timezone "$TZ"
           sudo mkdir -p /workdir
           sudo chown $USER:$GROUPS /workdir
-
       - name: Clone source code
         working-directory: /workdir
         run: |
           df -hT $PWD
           git clone $REPO_URL -b $REPO_BRANCH openwrt
           ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
-
       - name: Load target board files (meson8b target.mk)
         run: |
           [ -e target ] && cp -rf target openwrt/
-
       - name: Load custom feeds
         run: |
           [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
           chmod +x $DIY_P1_SH
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P1_SH
-
       - name: Update feeds
         run: cd openwrt && ./scripts/feeds update -a
-
       - name: Remove some feeds
         run: |
           chmod +x $DIY_P3_SH
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P3_SH
-
       - name: Second update feed
         run: cd openwrt && ./scripts/feeds update -a
-
       - name: Install feeds
         run: cd openwrt && ./scripts/feeds install -a
-
       - name: Load custom configuration onecloud.config
         run: |
           [ -e files ] && mv files openwrt/files
@@ -108,14 +96,12 @@ jobs:
           chmod +x $DIY_P2_SH
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P2_SH
-
       - name: SSH connection to Actions
         uses: P3TERX/ssh2actions@v1.0.0
         if: (github.event.inputs.ssh == 'true' && github.event.inputs.ssh  != 'false') || contains(github.event.action, 'ssh')
         env:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-
       - name: Download package
         id: package
         run: |
@@ -124,7 +110,6 @@ jobs:
           make download -j8
           find dl -size -1024c -exec ls -l {} \;
           find dl -size -1024c -exec rm -f {} \;
-
       - name: Compile the firmware
         id: compile
         run: |
@@ -135,23 +120,19 @@ jobs:
           grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
           [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
           echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
-
       - name: Generate direct burn
         run: |
           chmod +x $GITHUB_WORKSPACE/Scripts/convert1.sh
           $GITHUB_WORKSPACE/Scripts/convert1.sh
-
       - name: Check space usage
         if: (!cancelled())
         run: df -hT
-
       - name: Upload bin directory
         uses: actions/upload-artifact@v4
         if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
         with:
           name: OpenWrt-i2410_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
           path: openwrt/bin
-
       - name: Organize files
         id: organize
         if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
@@ -160,14 +141,12 @@ jobs:
           rm -rf packages
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
           echo "status=success" >> $GITHUB_OUTPUT
-
       - name: Upload firmware directory
         uses: actions/upload-artifact@v4
         if: steps.organize.outputs.status == 'success' && !cancelled()
         with:
           name: OpenWrt-i2410_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
           path: ${{ env.FIRMWARE }}
-
       - name: Generate release tag
         id: tag
         if: env.UPLOAD_RELEASE == 'true' && !cancelled()
@@ -175,6 +154,13 @@ jobs:
           echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
           touch release.txt
           echo "status=success" >> $GITHUB_OUTPUT
+
+      # ============新增步骤：打印文件列表 + 删除0字节空文件===========
+      - name: Clean zero‑size assets before release upload
+        if: steps.tag.outputs.status == 'success' && !cancelled()
+        run: |
+          ls -lh ${{ env.FIRMWARE }}
+          find ${{ env.FIRMWARE }} -type f -size 0 -delete
 
       - name: Upload firmware to release
         uses: softprops/action-gh-release@v2
@@ -184,6 +170,7 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.release_tag }}
           body_path: release.txt
+          fail_on_empty_assets: false
           files: ${{ env.FIRMWARE }}/*
 
       - name: Delete workflow runs
