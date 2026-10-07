@@ -4,7 +4,6 @@ curl -L -o ./AmlImg https://github.com/rmoyulong/AmlImg/releases/download/$ver/A
 chmod +x ./AmlImg
 curl -L -o ./uboot.img https://github.com/rmoyulong/u-boot-onecloud/releases/download/Onecloud_Uboot_23.12.24_18.15.09/eMMC.burn.img
 ./AmlImg unpack ./uboot.img burn/
-
 gunzip openwrt/bin/targets/*/*/*.gz
 diskimg=$(ls openwrt/bin/targets/*/*/*.img)
 loop=$(sudo losetup --find --show --partscan $diskimg)
@@ -43,9 +42,18 @@ EOF
 prefix=$(ls openwrt/bin/targets/*/*/*.img | sed 's/\.img$//')
 burnimg=${prefix}.burn.img
 ./AmlImg pack $burnimg burn/
-for f in openwrt/bin/targets/*/*/*.burn.img; do
-  sha256sum "$f" >"${f}.sha"
-  xz -9 --threads=0 --compress "$f"
+
+# ========== 压缩1：官方原始img，保留原文件，生成 img.gz ==========
+for f in openwrt/bin/targets/*/*/*.img; do
+  sha256sum "$f" >> "${f%.img}.sha256"
+  gzip -9 --keep "$f"
 done
-sudo rm -rf openwrt/bin/targets/*/*/*.img
+
+# ========== 压缩2：burn烧写镜像，保留原burn.img，生成 burn.img.gz ==========
+for f in openwrt/bin/targets/*/*/*.burn.img; do
+  sha256sum "$f" >> "${f%.burn.img}.sha256"
+  gzip -9 --keep "$f"
+done
+
+# 只删除编译解压出来的gz源文件，不再删除 *.img！
 sudo rm -rf openwrt/bin/targets/*/*/*.gz
