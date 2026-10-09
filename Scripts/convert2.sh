@@ -54,6 +54,3 @@ for f in openwrt/bin/targets/*/*/*.burn.img; do
   sha256sum "$f" >> "${f%.burn.img}.sha256"
   gzip -9 --keep "$f"
 done
-
-# 只删除编译解压出来的gz源文件，不再删除 *.img！
-sudo rm -rf openwrt/bin/targets/*/*/*.gz
