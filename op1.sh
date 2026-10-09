@@ -10,8 +10,11 @@
 # Description: OpenWrt DIY script part 1 (Before Update feeds)
 #
 set -e
-# 切换到标签 v24.10
-git checkout openwrt-24.10
+# ===== 自动获取24.10系列最新正式Release标签，替换原来固定切换分支 =====
+git fetch --tags
+LATEST_TAG=$(git tag -l "v24.10.*" | sort -V | tail -n1)
+echo "✅ 自动选中OpenWrt 24.10最新正式版标签: ${LATEST_TAG}"
+git checkout "${LATEST_TAG}"
 # 改为 ImmortalWrt 的 packages
 sed -i 's|^src-git packages https://git.openwrt.org/feed/packages.*|src-git packages https://github.com/immortalwrt/packages.git;openwrt-24.10|' feeds.conf.default
 # 改为 ImmortalWrt 的 luci
