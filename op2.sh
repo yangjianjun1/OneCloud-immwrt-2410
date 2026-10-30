@@ -11,10 +11,6 @@
 #
 set -e
 
-# ========== 替换 golang 为 26.x ==========
-rm -rf feeds/packages/lang/golang
-git clone https://github.com/sbwml/packages_lang_golang.git -b 26.x feeds/packages/lang/golang
-
 # ========== 拉取第三方插件，先清理避免重复clone报错 ==========
 rm -rf package/chajian
 mkdir -p package/chajian
