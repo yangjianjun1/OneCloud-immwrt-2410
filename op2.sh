@@ -20,15 +20,14 @@ git clone --depth 1 https://github.com/sirpdboy/luci-app-poweroffdevice.git pack
 # luci-app-mosdns（sbwml版本）
 git clone --depth 1 https://github.com/sbwml/luci-app-mosdns.git package/chajian/mosdns
 
-# --------------------------【关键修复：解决libustream互斥冲突】--------------------------
-# 删除自动推导出来的libustream‑openssl，强制使用mbedtls，防止文件冲突
+# --------------------------【核心防御：删除defconfig自动生成的libustream‑openssl，强制使用mbedtls】--------------------------
 sed -i '/CONFIG_PACKAGE_libustream-openssl/d' .config
 
 # 重新刷新feed与defconfig，清理无效依赖
 ./scripts/feeds update -a
 ./scripts/feeds install -a
 make defconfig
-# ---------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------------------------------
 
 # ========== 基础配置修改 ==========
 # 修改默认IP
@@ -47,8 +46,8 @@ sed -i 's/PRETTY_NAME="%D %V"/PRETTY_NAME="OpenWrt %V"/g' package/base-files/fil
 sed -i 's/OPENWRT_RELEASE="%D %V %C"/OPENWRT_RELEASE="OpenWrt %V %C"/g' package/base-files/files/usr/lib/os-release
 
 # ========== 默认主题 material ==========
-# ⚠️注意：需要在seed.config开启 CONFIG_PACKAGE_luci-theme-material=y，否则网页会白屏
-sed -i 's|set luci.main.mediaurlbase=.*|set luci.main.mediaurlbase=/luci-static/material|g' package/base-files/files/bin/config_generate
+# ⚠️ seed.config未开启 luci-theme‑material=y，保持注释，否则网页白屏
+# sed -i 's|set luci.main.mediaurlbase=.*|set luci.main.mediaurlbase=/luci-static/material|g' package/base-files/files/bin/config_generate
 
 # 修复 amlogic 打包脚本权限（OneCloud 玩客云必备）
 chmod +x target/linux/amlogic/image/gen_aml_emmc_img.sh
