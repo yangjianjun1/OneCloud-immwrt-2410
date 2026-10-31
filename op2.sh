@@ -19,9 +19,11 @@ git clone --depth 1 https://github.com/sirpdboy/luci-app-poweroffdevice.git pack
 # luci-app-mosdns
 git clone --depth 1 https://github.com/sbwml/luci-app-mosdns.git package/chajian/mosdns
 
-# ========== 核心：解决 libustream-openssl / libustream-mbedtls 冲突 ==========
-# 先强制写死禁用 libustream-openssl
+# ========== 核心：解决 libustream-openssl / libustream-mbedtls 冲突【双保险版】 ==========
+# 强制禁用 libustream-openssl
 echo "CONFIG_PACKAGE_libustream-openssl=n" >> .config
+# 强制启用 libustream-mbedtls
+echo "CONFIG_PACKAGE_libustream-mbedtls=y" >> .config
 
 # 更新并安装 feeds
 ./scripts/feeds update -a
@@ -30,8 +32,9 @@ echo "CONFIG_PACKAGE_libustream-openssl=n" >> .config
 # 执行 defconfig
 make defconfig
 
-# 兜底：如果defconfig把它改回y，强制改回n
+# 兜底：防止defconfig篡改
 sed -i 's/^CONFIG_PACKAGE_libustream-openssl=y/CONFIG_PACKAGE_libustream-openssl=n/g' .config
+sed -i 's/^CONFIG_PACKAGE_libustream-mbedtls=n/CONFIG_PACKAGE_libustream-mbedtls=y/g' .config
 
 # ========== 基础定制：IP、主机名、时区、固件名称 ==========
 # 默认IP
@@ -54,8 +57,8 @@ chmod +x target/linux/amlogic/image/gen_aml_sdimg.sh 2>/dev/null || true
 chmod +x target/linux/amlogic/image/gen_aml_update.sh 2>/dev/null || true
 
 # ========== 调试输出，CI里可直接查看是否关闭成功 ==========
-echo "==== libustream-openssl 状态 ===="
-grep CONFIG_PACKAGE_libustream-openssl .config
-echo "================================="
+echo "==== libustream 状态 ===="
+grep -E 'CONFIG_PACKAGE_libustream-(openssl|mbedtls)' .config
+echo "========================="
 
 echo "✅ diy-op2.sh 执行完毕"
