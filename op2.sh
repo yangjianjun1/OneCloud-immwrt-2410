@@ -9,7 +9,6 @@
 # File name: diy-op2.sh
 # Description: OpenWrt DIY script part 2 (After Update feeds)
 #
-set -e
 
 # ========== 拉取第三方插件，先清理避免重复clone报错 ==========
 rm -rf package/chajian
@@ -20,6 +19,16 @@ git clone --depth 1 https://github.com/sirpdboy/luci-app-poweroffdevice.git pack
 
 # luci-app-mosdns（sbwml版本）
 git clone --depth 1 https://github.com/sbwml/luci-app-mosdns.git package/chajian/mosdns
+
+# --------------------------【关键修复：解决libustream互斥冲突】--------------------------
+# 删除自动推导出来的libustream‑openssl，强制使用mbedtls，防止文件冲突
+sed -i '/CONFIG_PACKAGE_libustream-openssl/d' .config
+
+# 重新刷新feed与defconfig，清理无效依赖
+./scripts/feeds update -a
+./scripts/feeds install -a
+make defconfig
+# ---------------------------------------------------------------------------------------
 
 # ========== 基础配置修改 ==========
 # 修改默认IP
@@ -37,8 +46,8 @@ sed -i 's/NAME="%D"/NAME="OpenWrt"/g' package/base-files/files/usr/lib/os-releas
 sed -i 's/PRETTY_NAME="%D %V"/PRETTY_NAME="OpenWrt %V"/g' package/base-files/files/usr/lib/os-release
 sed -i 's/OPENWRT_RELEASE="%D %V %C"/OPENWRT_RELEASE="OpenWrt %V %C"/g' package/base-files/files/usr/lib/os-release
 
-# ========== 默认主题（推荐改用下面uci方式，比改luci-light更稳） ==========
-# 方案：设置uci默认主题为 material，前提：.config 选中 luci-theme-material
+# ========== 默认主题 material ==========
+# ⚠️注意：需要在seed.config开启 CONFIG_PACKAGE_luci-theme-material=y，否则网页会白屏
 sed -i 's|set luci.main.mediaurlbase=.*|set luci.main.mediaurlbase=/luci-static/material|g' package/base-files/files/bin/config_generate
 
 # 修复 amlogic 打包脚本权限（OneCloud 玩客云必备）
