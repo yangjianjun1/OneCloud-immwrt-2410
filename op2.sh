@@ -43,7 +43,4 @@ sed -i 's/OPENWRT_RELEASE="%D %V %C"/OPENWRT_RELEASE="OpenWrt %V %C"/g' package/
 # ========== 修复 amlogic 打包脚本权限（OneCloud 玩客云必备）==========
 chmod +x target/linux/amlogic/image/gen_aml_emmc_img.sh
 
-# ========== 刷新配置（只做一次）==========
-make defconfig
-
 echo "✅ op2.sh 执行完成"
