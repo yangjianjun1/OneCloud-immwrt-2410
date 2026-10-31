@@ -55,13 +55,13 @@ jobs:
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
 
-        # 创建12G交换分区，先关闭已有swap，规避占用删除失败
+        # 创建8G交换分区，先关闭已有swap，规避占用删除失败
         echo "Create swap file..."
         if [ -f /swapfile ]; then
           sudo swapoff /swapfile || true
         fi
         sudo rm -f /swapfile
-        sudo dd if=/dev/zero of=/swapfile bs=1M count=12288 status=none
+        sudo dd if=/dev/zero of=/swapfile bs=1M count=8192 status=none
         sudo chmod 600 /swapfile
         sudo mkswap /swapfile
         sudo swapon /swapfile
