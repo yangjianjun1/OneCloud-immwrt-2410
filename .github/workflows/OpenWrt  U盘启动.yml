@@ -55,9 +55,10 @@ jobs:
         sudo mkdir -p /workdir
         sudo chown $USER:$GROUPS /workdir
 
-        # 创建12G交换分区，防止编译OOM
+        # 创建12G交换分区，改用dd，规避fallocate Text file busy报错
         echo "Create swap file..."
-        sudo fallocate -l 12G /swapfile
+        sudo rm -f /swapfile
+        sudo dd if=/dev/zero of=/swapfile bs=1M count=12288 status=none
         sudo chmod 600 /swapfile
         sudo mkswap /swapfile
         sudo swapon /swapfile
