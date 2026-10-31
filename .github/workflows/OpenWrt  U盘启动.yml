@@ -165,6 +165,8 @@ jobs:
       run: |
         cd openwrt/bin/targets/*/*
         rm -rf packages
+        # 删除所有0字节文件，避免gh-release报错
+        find . -type f -size 0 -delete
         sha256sum * > sha256sums.txt
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
 
