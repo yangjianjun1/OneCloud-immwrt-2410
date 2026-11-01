@@ -1,118 +1,94 @@
 #!/bin/bash
 set -euo pipefail
+
 echo "::group::Build eMMC Burn image"
 
-# 安装依赖
+# 依赖
 sudo apt update -y
-sudo apt install -y android-sdk-libsparse-utils xz-utils
+sudo apt install -y android-sdk-libsparse-utils xz-utils rsync gzip
 
-# AmlImg版本
+# 下载工具
 ver="v0.3.1"
-curl --retry 3 -L -o ./AmlImg https://github.com/lxiaya/AmlImg/releases/download/$ver/AmlImg_${ver}_linux_amd64
+curl --retry 3 -L -o ./AmlImg "https://github.com/lxiaya/AmlImg/releases/download/$ver/AmlImg_${ver}_linux_amd64"
 chmod +x ./AmlImg
 
-# 下载玩客云u-boot eMMC固件
-curl --retry 3 -L -o ./uboot.img https://github.com/lxiaya/u-boot-onecloud/releases/download/build-20230901-0443/eMMC.burn.img
+curl --retry 3 -L -o ./uboot.img "https://github.com/lxiaya/u-boot-onecloud/releases/download/build-20230901-0443/eMMC.burn.img"
+rm -rf burn
 ./AmlImg unpack ./uboot.img burn/
 
-echo "::endgroup::"
+# 解压，找原始 img
+gunzip -f openwrt/bin/targets/*/*/*.gz || true
+diskimg=$(find openwrt/bin/targets -name "*.img" | head -n1)
+orig_dir=$(dirname "$diskimg")
 
-# 解压原固件gz
-gunzip -f openwrt/bin/targets/*/*/*.gz
+echo "✅ 源镜像：$diskimg"
 
-# 只取第一个img（防止多文件）
-diskimg=$(find openwrt/bin/targets -maxdepth 3 -name "*.img" | head -n1)
-if [ -z "$diskimg" ];then
-    echo "❌ 找不到原始img固件！"
-    exit 1
-fi
-prefix="${diskimg%.img}"
+# ===== loop 挂载 =====
+loop=$(sudo losetup --find --show --partscan "$diskimg")
+for i in $(seq 1 10); do
+    [ -e "${loop}p1" ] && [ -e "${loop}p2" ] && break
+    sudo partprobe "$loop" 2>/dev/null || true
+    sleep 1
+done
 
-# ========== 生成 eMMC burn.img ==========
-loop=$(sudo losetup --find --show -P "$diskimg")
-trap 'sudo losetup -d "$loop" 2>/dev/null' EXIT
-img_ext="./emmc_openwrt.img"
-sudo rm -rf "$img_ext"
-sudo dd if="${loop}p2" of="$img_ext" bs=4M status=none
-sudo losetup -d "$loop"
-trap - EXIT
+cleanup() {
+    set +e
+    sudo umount ./temp_rootfs 2>/dev/null
+    sudo umount ./temp_boot 2>/dev/null
+    sudo losetup -d "$loop" 2>/dev/null
+    sudo rm -rf ./temp_rootfs ./temp_boot
+    set -e
+}
+trap cleanup EXIT
 
-img_mnt="./mnt_emmc"
-sudo rm -rf "$img_mnt"
-mkdir -p "$img_mnt"
-loop2=$(sudo losetup --find --show "$img_ext")
-sudo mount "${loop2}p1" "$img_mnt"
-sudo sync
-sudo umount "$img_mnt"
-sudo losetup -d "$loop2"
-sudo rm -rf "$img_mnt"
+mkdir -p temp_rootfs temp_boot
+sudo mount "${loop}p2" temp_rootfs
 
-boot_img="./emmc_openwrt.img"
-sudo img2simg "$boot_img" burn/rootfs.simg
+p2_used_bytes=$(sudo du -sb temp_rootfs | awk '{print $1}')
+p2_size_mb=$(( p2_used_bytes / 1024 / 1024 + 50 ))
+
+new_rootfs_img="./openwrt_rootfs.ext4"
+sudo dd if=/dev/zero of="$new_rootfs_img" bs=1M count="$p2_size_mb" status=none
+sudo mkfs.ext4 -q "$new_rootfs_img"
+sudo mount "$new_rootfs_img" temp_boot
+
+sudo rsync -a temp_rootfs/ temp_boot/
+sudo umount temp_boot
+sudo umount temp_rootfs
+
+sudo img2simg "${loop}p1" burn/boot.simg
+sudo img2simg "$new_rootfs_img" burn/rootfs.simg
 
 cat > burn/commands.txt <<'EOF'
-PARTITION:boot 0x4000000
-WRITE:boot rootfs.simg
+PARTITION:boot:sparse:boot.simg
+PARTITION:rootfs:sparse:rootfs.simg
 EOF
 
-burnimg="${prefix}.burn.img"
+# ===== 打包线刷包 → OneCloud-immwrt-2410.burn.img.xz =====
+burnimg="${orig_dir}/OneCloud-immwrt-2410.burn.img"
 ./AmlImg pack "$burnimg" burn/
-
-# eMMC镜像 xz压缩，【不再生成独立sha256文件】
 xz -9 --threads=0 "$burnimg"
+echo "✅ 线刷包：${burnimg}.xz"
 
-# ====================== 脚本内部组装USB.burn.img ======================
-echo "::group::Build USB‑Boot burn image (build inside script)"
-
-USB_ASSETS="./usb_assets"
-USB_BURN_DIR="./usb_burn"
-mkdir -p "$USB_ASSETS"
-rm -rf "$USB_BURN_DIR"
-mkdir -p "$USB_BURN_DIR"
-
-#下载固件组件，增加重试
-curl --retry 3 -L -o "$USB_ASSETS/ddr_init.bin"     https://github.com/lxiaya/u-boot-onecloud/releases/download/build-20230901-0443/ddr_init.bin
-curl --retry 3 -L -o "$USB_ASSETS/firmware.bin"     https://github.com/lxiaya/u-boot-onecloud/releases/download/build-20230901-0443/firmware.bin
-curl --retry 3 -L -o "$USB_ASSETS/resource.img"     https://github.com/lxiaya/u-boot-onecloud/releases/download/build-20230901-0443/resource.img
-curl --retry 3 -L -o "$USB_ASSETS/u-boot-comp.bin"  https://github.com/lxiaya/u-boot-onecloud/releases/download/build-20230901-0443/u-boot-comp.bin
-
-cp "$USB_ASSETS/ddr_init.bin"     "$USB_BURN_DIR/"
-cp "$USB_ASSETS/firmware.bin"     "$USB_BURN_DIR/"
-cp "$USB_ASSETS/resource.img"     "$USB_BURN_DIR/"
-cp "$USB_ASSETS/u-boot-comp.bin"  "$USB_BURN_DIR/u-boot.bin"
-
-cat > "$USB_BURN_DIR/burn.conf" <<'EOF'
-DDR:ddr_init.bin
-FIRMWARE:firmware.bin
-RESOURCE:resource.img
-UBOOT:u-boot.bin
-EOF
-
-loop_usb=$(sudo losetup --find --show -P "$diskimg")
-trap 'sudo losetup -d "$loop_usb" 2>/dev/null' EXIT
-img_ext_usb="./usb_openwrt.img"
-sudo rm -rf "$img_ext_usb"
-sudo dd if="${loop_usb}p2" of="$img_ext_usb" bs=4M status=none
-sudo losetup -d "$loop_usb"
-trap - EXIT
-
-sudo img2simg "$img_ext_usb" "$USB_BURN_DIR/rootfs.simg"
-
-cat > "$USB_BURN_DIR/commands.txt" <<'EOF'
-PARTITION:boot 0x4000000
-WRITE:boot rootfs.simg
-EOF
-
-usb_burnimg="${prefix}-USB.burn.img"
-./AmlImg pack "$usb_burnimg" "$USB_BURN_DIR"
-
-# USB镜像 xz压缩，【不再生成独立sha256文件】
-xz -9 --threads=0 "$usb_burnimg"
-
-#清理临时文件
-sudo rm -rf "$USB_ASSETS" "$USB_BURN_DIR" "$img_ext_usb" burn ./AmlImg ./uboot.img
 echo "::endgroup::"
 
-# =========全部打包完成后，可选删除原始openwrt img/gz=========
-# sudo rm -rf openwrt/bin/targets/*/*/*.img
-# sudo rm -rf openwrt/bin/targets/*/*/*.gz
+# ===== 原始固件 → OneCloud-immwrt-2410.img.gz =====
+echo "::group::Pack original firmware"
+cp "$diskimg" "${orig_dir}/OneCloud-immwrt-2410.img"
+gzip -9 "${orig_dir}/OneCloud-immwrt-2410.img"
+echo "✅ 原始固件：${orig_dir}/OneCloud-immwrt-2410.img.gz"
+echo "::endgroup::"
+
+# ===== 严格清理：只留两个产物 =====
+sudo rm -f "$new_rootfs_img" ./AmlImg ./uboot.img
+rm -rf burn temp_rootfs temp_boot
+
+# 删除原始编译产物（已被重命名版替代）
+rm -f "$diskimg"
+
+# 删除目录中可能残留的其他文件
+find "$orig_dir" -maxdepth 1 -name "*.img" -delete
+find "$orig_dir" -maxdepth 1 -name "*.gz" ! -name "OneCloud-immwrt-2410.img.gz" -delete
+
+echo "🎉 完成！最终产物："
+ls -lh "${orig_dir}/OneCloud-immwrt-2410".*
