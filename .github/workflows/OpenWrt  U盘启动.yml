@@ -182,7 +182,7 @@ jobs:
         files: |
           ${{ env.FIRMWARE }}/*
         fail_on_unmatched_files: false
-         draft: false
+        draft: false
         - name: 上传固件到Release
 
 
