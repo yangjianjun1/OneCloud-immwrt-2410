@@ -167,8 +167,8 @@ jobs:
         rm -rf packages
         # 删除0字节空文件，彻底解决gh-release 422报错
         find . -type f -size 0 -delete
-        # 排除自身，不把sha256sums.txt写入自己
-        sha256sum $(ls | grep -v '^sha256sums.txt$') > sha256sums.txt
+        # 安全生成sha256sums，排除自身，避免参数溢出、文件名空格问题
+        find . -maxdepth 1 -type f ! -name "sha256sums.txt" -print0 | sort -z | xargs -0 sha256sum > sha256sums.txt
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
 
     - name: 上传固件到Release
@@ -176,6 +176,7 @@ jobs:
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        TZ: Asia/Shanghai
       with:
         tag_name: ${{ github.run_id }}
         name: ${{ format('{0:yyyy.MM.dd-HHmm}', github.event.created_at) }}
@@ -183,8 +184,6 @@ jobs:
           ${{ env.FIRMWARE }}/*
         fail_on_unmatched_files: false
         draft: false
-        - name: 上传固件到Release
-
 
     - name: Telegram 编译成功通知
       if: steps.compile.outputs.status == 'success'
