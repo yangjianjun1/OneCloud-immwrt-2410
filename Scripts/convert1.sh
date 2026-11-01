@@ -34,26 +34,30 @@ done
 cleanup() {
     set +e
     sudo umount ./temp_rootfs 2>/dev/null
-    sudo umount ./temp_boot 2>/dev/null
+    sudo umount ./temp_newroot 2>/dev/null
     sudo losetup -d "$loop" 2>/dev/null
-    sudo rm -rf ./temp_rootfs ./temp_boot
+    sudo rm -rf ./temp_rootfs ./temp_newroot
     set -e
 }
 trap cleanup EXIT
 
-mkdir -p temp_rootfs temp_boot
+mkdir -p temp_rootfs temp_newroot
 sudo mount "${loop}p2" temp_rootfs
 
-p2_used_bytes=$(sudo du -sb temp_rootfs | awk '{print $1}')
-p2_size_mb=$(( p2_used_bytes / 1024 / 1024 + 50 ))
+# ===== 按原 p2 分区实际大小创建新镜像（彻底解决空间不足）=====
+p2_size_bytes=$(sudo lsblk -b -n -o SIZE "${loop}p2")
+p2_size_mb=$(( p2_size_bytes / 1024 / 1024 ))
+echo "📏 原 p2 分区大小：${p2_size_mb}MB，按此大小创建新镜像"
 
 new_rootfs_img="./openwrt_rootfs.ext4"
-sudo dd if=/dev/zero of="$new_rootfs_img" bs=1M count="$p2_size_mb" status=none
-sudo mkfs.ext4 -q "$new_rootfs_img"
-sudo mount "$new_rootfs_img" temp_boot
+# fallocate 秒级分配，比 dd 快得多
+fallocate -l "${p2_size_mb}M" "$new_rootfs_img"
+# -m 0 禁用 root 预留空间，多挤出 5%
+sudo mkfs.ext4 -q -m 0 "$new_rootfs_img"
+sudo mount "$new_rootfs_img" temp_newroot
 
-sudo rsync -a temp_rootfs/ temp_boot/
-sudo umount temp_boot
+sudo rsync -a temp_rootfs/ temp_newroot/
+sudo umount temp_newroot
 sudo umount temp_rootfs
 
 sudo img2simg "${loop}p1" burn/boot.simg
@@ -81,7 +85,7 @@ echo "::endgroup::"
 
 # ===== 严格清理：只留两个产物 =====
 sudo rm -f "$new_rootfs_img" ./AmlImg ./uboot.img
-rm -rf burn temp_rootfs temp_boot
+rm -rf burn temp_rootfs temp_newroot
 
 # 删除原始编译产物（已被重命名版替代）
 rm -f "$diskimg"
