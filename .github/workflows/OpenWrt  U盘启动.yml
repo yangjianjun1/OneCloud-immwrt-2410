@@ -178,9 +178,13 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ github.run_id }}
+        name: ${{ format('{0:yyyy.MM.dd-HHmm}', github.event.created_at) }}
         files: |
           ${{ env.FIRMWARE }}/*
         fail_on_unmatched_files: false
+         draft: false
+        - name: 上传固件到Release
+
 
     - name: Telegram 编译成功通知
       if: steps.compile.outputs.status == 'success'
