@@ -153,7 +153,8 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
-        echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+        # ↓↓↓ 修改点1：FILE_DATE 改为点分隔日期格式，去掉下划线 ↓↓↓
+        echo "FILE_DATE=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_ENV
 
     - name: 生成可直接烧录镜像
       run: |
@@ -165,9 +166,7 @@ jobs:
       run: |
         cd openwrt/bin/targets/*/*
         rm -rf packages
-        # 删除0字节空文件，彻底解决gh-release 422报错
         find . -type f -size 0 -delete
-        # 安全生成sha256sums，排除自身，避免参数溢出、文件名空格问题
         find . -maxdepth 1 -type f ! -name "sha256sums.txt" -print0 | sort -z | xargs -0 sha256sum > sha256sums.txt
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
 
@@ -178,7 +177,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         TZ: Asia/Shanghai
       with:
-        tag_name: OneCloud-${{ github.run_id }}
+        tag_name: OneCloud-${{ env.FILE_DATE }}
         name: OneCloud-${{ env.FILE_DATE }}
         files: |
           ${{ env.FIRMWARE }}/*
