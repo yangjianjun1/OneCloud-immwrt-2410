@@ -1,25 +1,19 @@
 #!/bin/bash
 #
 # File name: diy-op2.sh
-# Description: OpenWrt DIY script part 2 (After Update feeds)
+# Description: DIY script part 2 (After Update feeds)
 #
 
 # ========== 拉取第三方插件 ==========
 rm -rf package/chajian
 mkdir -p package/chajian
 
-# luci-app-poweroffdevice (锁到 v2.7 tag，兼容 24.10.x)
+# luci-app-poweroffdevice（锁 v2.7，兼容 24.10.x）
 git clone --depth 1 --branch v2.7 https://github.com/sirpdboy/luci-app-poweroffdevice.git package/chajian/poweroffdevice
-
-# luci-app-mosdns (如需启用，取消注释)
-# git clone --depth 1 --branch v5 https://github.com/sbwml/luci-app-mosdns.git package/chajian/mosdns
 
 # ========== 核心：解决 libustream 冲突 ==========
 echo "CONFIG_PACKAGE_libustream-openssl=n" >> .config
 echo "CONFIG_PACKAGE_libustream-mbedtls=y" >> .config
-
-# ⚠️ 注意：不再在这里执行 feeds update/install
-# 因为 Workflow 里已经在前面执行过了，且锁定版本后不应再拉最新
 
 # ========== 基础定制：IP、主机名、时区 ==========
 sed -i "s|set network\.lan\.ipaddr='192.168.1.1'|set network.lan.ipaddr='192.168.50.23'|g" package/base-files/files/bin/config_generate
