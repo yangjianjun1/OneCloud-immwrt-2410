@@ -17,7 +17,7 @@ mkdir -p package/chajian
 # luci-app-poweroffdevice
 git clone --depth 1 https://github.com/sirpdboy/luci-app-poweroffdevice.git package/chajian/poweroffdevice
 # luci-app-mosdns
-git clone --depth 1 https://github.com/sbwml/luci-app-mosdns.git package/chajian/mosdns
+# git clone --depth 1 https://github.com/sbwml/luci-app-mosdns.git package/chajian/mosdns
 
 # ========== 核心：解决 libustream-openssl / libustream-mbedtls 冲突【双保险版】 ==========
 # 强制禁用 libustream-openssl
