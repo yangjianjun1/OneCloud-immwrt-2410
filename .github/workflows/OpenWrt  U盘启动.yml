@@ -27,7 +27,7 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 180
+    timeout-minutes: 240
     steps:
     - name: 检出代码
       uses: actions/checkout@main
