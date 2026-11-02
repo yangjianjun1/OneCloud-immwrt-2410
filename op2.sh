@@ -36,14 +36,17 @@ make defconfig
 sed -i 's/^CONFIG_PACKAGE_libustream-openssl=y/CONFIG_PACKAGE_libustream-openssl=n/g' .config
 sed -i 's/^CONFIG_PACKAGE_libustream-mbedtls=n/CONFIG_PACKAGE_libustream-mbedtls=y/g' .config
 
-# ========== 基础定制：IP、主机名、时区、固件名称 ==========
-# 默认IP
-sed -i 's/192.168.50.1/192.168.50.23/g' package/base-files/files/bin/config_generate
-# 主机名
-sed -i "s/hostname='.*'/hostname='OneCloud'/g" package/base-files/files/bin/config_generate
-# 时区
-sed -i "s/timezone='.*'/timezone='CST-8'/g" package/base-files/files/bin/config_generate
-sed -i "/timezone='CST-8'/a\ set system.@system[-1].zonename='Asia/Shanghai'" package/base-files/files/bin/config_generate
+# 默认IP：192.168.1.1 → 192.168.50.23
+sed -i "s|set network\.lan\.ipaddr='192.168.1.1'|set network.lan.ipaddr='192.168.50.23'|g" package/base-files/files/bin/config_generate
+
+# 主机名：OpenWrt → OneCloud
+sed -i "s|set system\.@system\[-1\]\.hostname='OpenWrt'|set system.@system[-1].hostname='OneCloud'|g" package/base-files/files/bin/config_generate
+
+# 时区：UTC → CST-8
+sed -i "s|set system\.@system\[-1\]\.timezone='UTC'|set system.@system[-1].timezone='CST-8'|g" package/base-files/files/bin/config_generate
+
+# zonename：UTC → Asia/Shanghai
+sed -i "s|set system\.@system\[-1\]\.zonename='UTC'|set system.@system[-1].zonename='Asia/Shanghai'|g" package/base-files/files/bin/config_generate
 
 # 固件界面显示名称
 sed -i 's/NAME="%D"/NAME="OpenWrt"/g' package/base-files/files/usr/lib/os-release
