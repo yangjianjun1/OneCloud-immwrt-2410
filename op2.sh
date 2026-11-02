@@ -36,17 +36,21 @@ make defconfig
 sed -i 's/^CONFIG_PACKAGE_libustream-openssl=y/CONFIG_PACKAGE_libustream-openssl=n/g' .config
 sed -i 's/^CONFIG_PACKAGE_libustream-mbedtls=n/CONFIG_PACKAGE_libustream-mbedtls=y/g' .config
 
-# 默认IP：192.168.1.1 → 192.168.50.23
+# ========== 基础定制：IP、主机名、时区、固件名称 ==========
+# 默认IP
 sed -i "s|set network\.lan\.ipaddr='192.168.1.1'|set network.lan.ipaddr='192.168.50.23'|g" package/base-files/files/bin/config_generate
-
-# 主机名：OpenWrt → OneCloud
+# 主机名
 sed -i "s|set system\.@system\[-1\]\.hostname='OpenWrt'|set system.@system[-1].hostname='OneCloud'|g" package/base-files/files/bin/config_generate
-
-# 时区：UTC → CST-8
+# 时区
 sed -i "s|set system\.@system\[-1\]\.timezone='UTC'|set system.@system[-1].timezone='CST-8'|g" package/base-files/files/bin/config_generate
-
-# zonename：UTC → Asia/Shanghai
+# zonename
 sed -i "s|set system\.@system\[-1\]\.zonename='UTC'|set system.@system[-1].zonename='Asia/Shanghai'|g" package/base-files/files/bin/config_generate
+
+# ========== 主题：luci-theme-material ==========
+echo "CONFIG_PACKAGE_luci-theme-material=y" >> .config
+sed -i '/CONFIG_PACKAGE_luci-theme-bootstrap/d' .config
+echo "# CONFIG_PACKAGE_luci-theme-bootstrap is not set" >> .config
+sed -i 's|option mediaurlbase.*|option mediaurlbase /luci-static/material|g' feeds/luci/modules/luci-base/root/etc/config/luci 2>/dev/null || true
 
 # 固件界面显示名称
 sed -i 's/NAME="%D"/NAME="OpenWrt"/g' package/base-files/files/usr/lib/os-release
