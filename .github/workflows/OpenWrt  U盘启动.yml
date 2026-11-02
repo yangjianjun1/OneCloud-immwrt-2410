@@ -178,8 +178,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         TZ: Asia/Shanghai
       with:
-        tag_name: ${{ github.run_id }}
-        name: ${{ format('{0:yyyy.MM.dd-HHmm}', github.event.created_at) }}
+        tag_name: OneCloud-${{ github.run_id }}
+        name: OneCloud-${{ env.FILE_DATE }}
         files: |
           ${{ env.FIRMWARE }}/*
         fail_on_unmatched_files: false
