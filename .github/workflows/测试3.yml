@@ -185,6 +185,10 @@ jobs:
         find . -maxdepth 1 -type f ! -name "sha256sums.txt" -print0 | sort -z | xargs -0 sha256sum > sha256sums.txt
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
 
+    - name: 生成当前时间标签
+          if: steps.compile.outputs.status == 'success'
+          run: echo "FILE_DATE=$(TZ='Asia/Shanghai' date +'%Y.%m.%d-%H%M')" >> $GITHUB_ENV
+          
     - name: 上传固件到Release
       uses: softprops/action-gh-release@v2.0.8
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true'
