@@ -12,6 +12,12 @@ git clone --depth 1 --branch v2.7 https://github.com/sirpdboy/luci-app-poweroffd
 rm -rf package/chajian/luci-app-podman
 git clone --depth 1 https://github.com/Zerogiven-OpenWRT-Packages/luci-app-podman.git package/chajian/luci-app-podman
 
+# luci-app-diskman 磁盘管理
+rm -rf package/chajian/luci-app-diskman
+git clone --depth 1 https://github.com/lisaac/luci-app-diskman.git package/chajian/luci-app-diskman
+mkdir -p package/chajian/parted
+wget -O package/chajian/parted/Makefile https://raw.githubusercontent.com/lisaac/luci-app-diskman/master/Parted.Makefile
+
 # ====================== libustream 冲突处理 ======================
 echo "CONFIG_PACKAGE_libustream-openssl=n" >> .config
 echo "CONFIG_PACKAGE_libustream-mbedtls=y" >> .config
