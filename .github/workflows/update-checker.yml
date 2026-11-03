@@ -13,9 +13,8 @@
 name: Update Checker
 
 env:
-  REPO_URL: https://github.com/openwrt/openwrt.git
-  REPO_BRANCH: openwrt-24.10
-
+  REPO_URL: https://github.com/immortalwrt/immortalwrt.git
+  REPO_TAG: v24.10.6
 on:
   workflow_dispatch:
 #  schedule:
