@@ -192,7 +192,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         TZ: Asia/Shanghai
       with:
-        tag_name: OneCloud-${{ github.run_id }}
+        tag_name: OneCloud-${{ env.FILE_DATE }}
         name: OneCloud-${{ env.FILE_DATE }}
         files: |
           ${{ env.FIRMWARE }}/*
