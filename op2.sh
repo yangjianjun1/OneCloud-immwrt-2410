@@ -14,10 +14,6 @@ git clone --depth 1 https://github.com/lisaac/luci-app-diskman.git package/chaji
 mkdir -p package/chajian/parted
 wget -O package/chajian/parted/Makefile https://raw.githubusercontent.com/lisaac/luci-app-diskman/master/Parted.Makefile
 
-# ====================== libustream 冲突处理 ======================
-echo "CONFIG_PACKAGE_libustream-openssl=n" >> .config
-echo "CONFIG_PACKAGE_libustream-mbedtls=y" >> .config
-
 # ====================== IP / 主机名 / 时区 ======================
 sed -i "s|set network\.lan\.ipaddr='192.168.1.1'|set network.lan.ipaddr='192.168.50.23'|g" package/base-files/files/bin/config_generate
 sed -i "s|set system\.@system\[-1\]\.hostname='OpenWrt'|set system.@system[-1].hostname='OneCloud'|g" package/base-files/files/bin/config_generate
@@ -40,26 +36,5 @@ chmod +x target/linux/amlogic/image/gen_aml_emmc_img.sh 2>/dev/null || true
 chmod +x target/linux/amlogic/image/gen_aml_img.sh 2>/dev/null || true
 chmod +x target/linux/amlogic/image/gen_aml_sdimg.sh 2>/dev/null || true
 chmod +x target/linux/amlogic/image/gen_aml_update.sh 2>/dev/null || true
-
-# ====================== luci-app-podman 网页依赖兜底 ======================
-# 防止 .config 里漏写导致 defconfig 阶段被静默剔除
-echo "CONFIG_PACKAGE_luci-app-podman=y" >> .config
-echo "CONFIG_PACKAGE_luci-i18n-podman-zh-cn=y" >> .config
-echo "CONFIG_PACKAGE_rpcd-mod-ucode=y" >> .config
-echo "CONFIG_PACKAGE_ucode-mod-socket=y" >> .config
-echo "CONFIG_PACKAGE_ucode-mod-struct=y" >> .config
-echo "CONFIG_PACKAGE_ucode-mod-uloop=y" >> .config
-echo "CONFIG_PACKAGE_ucode-mod-fs=y" >> .config
-echo "CONFIG_PACKAGE_ucode-mod-uci=y" >> .config
-echo "CONFIG_PACKAGE_coreutils-timeout=y" >> .config
-
-# ====================== 验证输出 ======================
-echo "==== libustream 状态 ===="
-grep -E 'CONFIG_PACKAGE_libustream-(openssl|mbedtls)' .config
-echo "========================="
-
-echo "==== luci-app-podman 状态 ===="
-grep -E 'CONFIG_PACKAGE_luci-app-podman' .config
-echo "=============================="
 
 echo "✅ diy-op2.sh 执行完毕"
