@@ -8,10 +8,6 @@ mkdir -p package/chajian
 # 关机插件
 git clone --depth 1 --branch v2.7 https://github.com/sirpdboy/luci-app-poweroffdevice.git package/chajian/poweroffdevice
 
-# luci-app-podman 网页管理（Zerogiven 维护，官方源没有）
-rm -rf package/chajian/luci-app-podman
-git clone --depth 1 https://github.com/Zerogiven-OpenWRT-Packages/luci-app-podman.git package/chajian/luci-app-podman
-
 # luci-app-diskman 磁盘管理
 rm -rf package/chajian/luci-app-diskman
 git clone --depth 1 https://github.com/lisaac/luci-app-diskman.git package/chajian/luci-app-diskman
