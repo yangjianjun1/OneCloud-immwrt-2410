@@ -97,9 +97,6 @@ jobs:
     - name: 二次更新软件源
       run: cd openwrt && ./scripts/feeds update -a
 
-    - name: 安装软件源包
-      run: cd openwrt && ./scripts/feeds install -a
-
     - name: 锁定 feeds 到 24.10 稳定分支
       run: |
         cd openwrt
@@ -110,6 +107,10 @@ jobs:
           fi
         done
         echo "✅ feeds 锁定完成"
+    - name: 安装软件源包（feeds install）
+      run: |
+        cd openwrt
+        ./scripts/feeds install -a 2>&1 | tee feeds_install.log
     - name: 载入配置文件与执行op2脚本
       run: |
         [ -e files ] && mv files openwrt/files
@@ -121,7 +122,7 @@ jobs:
       uses: actions/cache@v4.2.1
       with:
         path: /workdir/openwrt/.ccache
-        key: ${{ env.CACHE_KEY_PREFIX }}-ccache-${{ github.ref_name }}-${{ github.sha }}
+        key: ${{ env.CACHE_KEY_PREFIX }}-ccache-${{ github.ref_name }}-${{ hashFiles('onecloud.config') }}
         restore-keys: |
           ${{ env.CACHE_KEY_PREFIX }}-ccache-${{ github.ref_name }}-
           ${{ env.CACHE_KEY_PREFIX }}-ccache-
@@ -139,10 +140,10 @@ jobs:
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
-    - name: 预下载源码包
+    - name: make defconfig + 预下载源码包
       run: |
         cd openwrt
-        make defconfig
+        make defconfig 2>&1 | tee defconfig.log
         make download -j8
         find dl -size -1024c -exec rm -f {} \;
         echo "✅ 预下载完成"
@@ -161,13 +162,22 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
-    - name: 保存编译日志（失败时上传）
+    - name: 保存精简错误日志（失败）
       if: failure()
       run: |
         cd openwrt
-        tail -n 1000 build.log > error.log
-        echo "日志已截取末尾1000行保存为 error.log"
-    - name: 上传错误日志
+        tail -n 2000 build.log > error.log
+        echo "✅ 已截取末尾2000行保存为 error.log"
+    - name: 上传全部日志包（成功+失败）
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-all-logs
+        path: |
+          openwrt/feeds_install.log
+          openwrt/defconfig.log
+          openwrt/build.log
+        retention-days: 7
+    - name: 上传精简错误日志（仅失败）
       if: failure()
       uses: actions/upload-artifact@v4
       with:
@@ -215,6 +225,6 @@ jobs:
       if: failure()
       continue-on-error: true
       run: |
-        curl -s --connect-timeout 10 "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+        curl -s --connect-timeout 10 "https://api.telegram.org/bot${{ secrets.TELEGRAM_CHAT_ID }}" \
         -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-        -d "text=❌ OneCloud固件编译失败！RunID:${{ github.run_id }} 👉 去Artifacts下载 build-error-log" || true
+        -d "text=❌ OneCloud固件编译失败！RunID:${{ github.run_id }} 👉 去Artifacts下载 build-all-logs" || true
