@@ -107,10 +107,28 @@ jobs:
           fi
         done
         echo "✅ feeds 锁定完成"
+
+    - name: Patch 修复 default-settings-chn 依赖（dnsmasq||dnsmasq-full）
+      run: |
+        cd openwrt
+        PKG_PATH="feeds/packages/default-settings-chn"
+        if [ -f "${PKG_PATH}/Makefile" ]; then
+          echo ">>> 修补 ${PKG_PATH}/Makefile"
+          # 替换 DEPENDS 里的 +dnsmasq
+          sed -i -E 's/\+dnsmasq($|[[:space:]])/dnsmasq||dnsmasq-full /g' "${PKG_PATH}/Makefile"
+          grep "DEPENDS" "${PKG_PATH}/Makefile"
+        else
+          echo "⚠️ default-settings-chn Makefile不存在，跳过补丁"
+        fi
+        # 全局扫描，输出所有写死 +dnsmasq 的包，写入日志
+        grep -r "DEPENDS:=+dnsmasq" feeds/ --include Makefile > feeds_dep_dnsmasq.log || echo "✅ 扫描：无写死 +dnsmasq 的包"
+        cat feeds_dep_dnsmasq.log
+
     - name: 安装软件源包（feeds install）
       run: |
         cd openwrt
         ./scripts/feeds install -a 2>&1 | tee feeds_install.log
+
     - name: 载入配置文件与执行op2脚本
       run: |
         [ -e files ] && mv files openwrt/files
@@ -176,6 +194,7 @@ jobs:
           openwrt/feeds_install.log
           openwrt/defconfig.log
           openwrt/build.log
+          openwrt/feeds_dep_dnsmasq.log
         retention-days: 7
     - name: 上传精简错误日志（仅失败）
       if: failure()
@@ -225,6 +244,6 @@ jobs:
       if: failure()
       continue-on-error: true
       run: |
-        curl -s --connect-timeout 10 "https://api.telegram.org/bot${{ secrets.TELEGRAM_CHAT_ID }}" \
+        curl -s --connect-timeout 10 "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
         -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
         -d "text=❌ OneCloud固件编译失败！RunID:${{ github.run_id }} 👉 去Artifacts下载 build-all-logs" || true
