@@ -108,14 +108,14 @@ jobs:
         done
         echo "✅ feeds 锁定完成"
 
-    - name: Patch 移除 default-settings-chn 规避uci-defaults时序报错
+    - name: Patch 移除 default-settings-chn + 清空base-files uci-defaults
       run: |
         cd openwrt
-        # ImmortalWrt v24.10.6 真实路径
         rm -rf feeds/luci/collections/luci-i18n-zh-cn/default-settings-chn
-        echo "✅ default-settings-chn 目录已删除，不会被依赖自动选中"
-        # 若本次编译依旧卡在dnsmasq-full报错，打开下面注释
-        # sed -i '/dhcp\.@dnsmasq/d' package/base-files/files/etc/uci-defaults/* 2>/dev/null || true
+        echo "✅ default-settings-chn 已删除"
+        [ -d package/base-files/files/etc/uci-defaults ] && mv package/base-files/files/etc/uci-defaults package/base-files/files/etc/uci-defaults.bak
+        mkdir -p package/base-files/files/etc/uci-defaults
+        echo "✅ base-files uci-defaults 已清空备份"
         grep -r "DEPENDS:=+dnsmasq" feeds/ --include Makefile > feeds_dep_dnsmasq.log || echo "✅ 扫描：无写死 +dnsmasq 的包"
         cat feeds_dep_dnsmasq.log
 
