@@ -108,16 +108,11 @@ jobs:
         done
         echo "✅ feeds 锁定完成"
 
-    - name: Patch 移除 default-settings-chn + 清空base-files uci-defaults
+    - name: 执行 dnsmasq 冲突修复补丁
       run: |
         cd openwrt
-        rm -rf feeds/luci/collections/luci-i18n-zh-cn/default-settings-chn
-        echo "✅ default-settings-chn 已删除"
-        [ -d package/base-files/files/etc/uci-defaults ] && mv package/base-files/files/etc/uci-defaults package/base-files/files/etc/uci-defaults.bak
-        mkdir -p package/base-files/files/etc/uci-defaults
-        echo "✅ base-files uci-defaults 已清空备份"
-        grep -r "DEPENDS:=+dnsmasq" feeds/ --include Makefile > feeds_dep_dnsmasq.log || echo "✅ 扫描：无写死 +dnsmasq 的包"
-        cat feeds_dep_dnsmasq.log
+        chmod +x $GITHUB_WORKSPACE/Scripts/patch-dnsmasq.sh
+        $GITHUB_WORKSPACE/Scripts/patch-dnsmasq.sh
 
     - name: 安装软件源包（feeds install）
       run: |
